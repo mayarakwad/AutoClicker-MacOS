@@ -3,8 +3,10 @@ import queue
 import tkinter as tk
 from tkinter import ttk
 
+import settings
 from engine import ClickConfig, ClickEngine
-from hotkeys import HotkeyListener
+from hotkey_dialog import HotkeyDialog
+from hotkeys import DEFAULT_HOTKEY, HotkeyListener, combo_problem, display_name
 from mouse_io import PointPicker, on_screen
 
 # How often the window checks hotkey events and engine status.
@@ -36,20 +38,28 @@ def _set_enabled(widget, enabled):
 
 
 class App:
-    def __init__(self, root):
+    def __init__(self, root, settings_path=None):
         self.root = root
+        self.settings_path = settings_path
         self.engine = ClickEngine()
         self.error = ""
         self.picker = None
         self.tip = None
+        self.dialog = None
+        saved = settings.load(settings_path)
+        hotkey = saved.get("hotkey")
+        if not isinstance(hotkey, str) or combo_problem(hotkey):
+            hotkey = DEFAULT_HOTKEY
         # Hotkeys and the picker fire on pynput's threads; queue their events
         # as tuples so tkinter is only touched from the main thread.
         self.events = queue.Queue()
         self.hotkeys = HotkeyListener(
             on_toggle=lambda: self.events.put(("toggle",)),
             on_escape=lambda: self.events.put(("escape",)),
+            hotkey=hotkey,
         )
         self._build()
+        self._apply_settings(saved)
         self.hotkeys.start()
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._poll()
@@ -127,19 +137,67 @@ class App:
         self.y_entry = number_entry(box, self.y, coordinate)
         self.y_entry.grid(row=0, column=6, padx=(4, 0))
 
-        key = self.hotkeys.hotkey.upper()
-        self.start_button = ttk.Button(outer, text=f"Start ({key})", command=self.start)
+        self.start_button = ttk.Button(outer, command=self.start)
         self.start_button.grid(row=3, column=0, sticky="ew", padx=(0, 4), pady=(10, 0), ipady=6)
-        self.stop_button = ttk.Button(outer, text=f"Stop ({key})", command=self.stop)
+        self.stop_button = ttk.Button(outer, command=self.stop)
         self.stop_button.grid(row=3, column=1, sticky="ew", padx=(4, 0), pady=(10, 0), ipady=6)
+        self.hotkey_button = ttk.Button(outer, text="Hotkey setting", command=self.open_hotkey_dialog)
+        self.hotkey_button.grid(row=4, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
+        self._update_hotkey_labels()
 
         self.status = ttk.Label(outer, anchor="w")
-        self.status.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.status.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         # Traces (not widget commands) so entries also follow values set in code.
         for var in (self.use_offset, self.repeat_mode, self.position_mode):
             var.trace_add("write", lambda *_: self._sync_inputs())
         self._sync_inputs()
         self._refresh()
+
+    def _update_hotkey_labels(self):
+        key = display_name(self.hotkeys.hotkey)
+        self.start_button.config(text=f"Start ({key})")
+        self.stop_button.config(text=f"Stop ({key})")
+
+    def _setting_vars(self):
+        """Settings key -> (variable, check that a loaded value is usable)."""
+        def digits(v):
+            return isinstance(v, str) and _is_digits(v)
+
+        def coordinate(v):
+            return isinstance(v, str) and _is_coordinate(v)
+
+        def one_of(*options):
+            return lambda v: isinstance(v, str) and v in options
+
+        return {
+            "hours": (self.hours, digits),
+            "mins": (self.mins, digits),
+            "secs": (self.secs, digits),
+            "millis": (self.millis, digits),
+            "use_offset": (self.use_offset, lambda v: isinstance(v, bool)),
+            "offset": (self.offset, digits),
+            "button": (self.button, one_of(*BUTTON_NAMES)),
+            "click_type": (self.click_type, one_of(*CLICK_TYPES)),
+            "repeat_mode": (self.repeat_mode, one_of("count", "forever")),
+            "repeat_count": (self.repeat_count, digits),
+            "position_mode": (self.position_mode, one_of("current", "pick")),
+            "x": (self.x, coordinate),
+            "y": (self.y, coordinate),
+        }
+
+    def _apply_settings(self, saved):
+        """Restore saved values; anything missing or invalid keeps its default."""
+        for key, (var, usable) in self._setting_vars().items():
+            if key in saved and usable(saved[key]):
+                var.set(saved[key])
+
+    def _save_settings(self):
+        data = {key: var.get() for key, (var, _) in self._setting_vars().items()}
+        data["hotkey"] = self.hotkeys.hotkey
+        try:
+            settings.save(data, self.settings_path)
+        except OSError:
+            pass  # not worth interrupting clicking over; defaults return next launch
 
     def _sync_inputs(self):
         """Enable each entry only while the option it belongs to is selected."""
@@ -185,6 +243,7 @@ class App:
     def start(self):
         if self.engine.running or self.picker is not None:
             return
+        self._save_settings()
         try:
             self.engine.start(self._read_config())
         except ValueError as e:
@@ -226,11 +285,12 @@ class App:
         x, y = self.root.winfo_pointerxy()
         self.tip_label.config(text=f"X {x}   Y {y}\nClick to pick this point · Esc to cancel")
         self.tip.geometry(f"+{x + 16}+{y + 20}")
-        self.root.after(TIP_MS, self._follow_cursor)
+        self._tip_job = self.root.after(TIP_MS, self._follow_cursor)
 
     def _end_pick(self, point=None):
         self.picker.stop()
         self.picker = None
+        self.root.after_cancel(self._tip_job)
         self.tip.destroy()
         self.tip = None
         self.root.deiconify()
@@ -241,11 +301,30 @@ class App:
             self.y.set(str(point[1]))
             self.position_mode.set("pick")
 
+    def open_hotkey_dialog(self):
+        if self.engine.running or self.dialog is not None:
+            return
+        self.dialog = HotkeyDialog(
+            self.root, self.hotkeys.hotkey,
+            listen=lambda: self.hotkeys.record(lambda combo: self.events.put(("recorded", combo))),
+            stop_listening=self.hotkeys.stop_recording,
+            on_close=self._hotkey_dialog_closed,
+        )
+
+    def _hotkey_dialog_closed(self, hotkey):
+        self.dialog = None
+        if hotkey is not None:
+            self.hotkeys.hotkey = hotkey
+            self._update_hotkey_labels()
+            self._save_settings()
+
     def close(self):
         if self.picker is not None:
-            self.picker.stop()
+            self._end_pick()
         self.engine.stop()
         self.hotkeys.stop()
+        self._save_settings()
+        self.root.after_cancel(self._poll_job)
         self.root.destroy()
 
     def _poll(self):
@@ -254,22 +333,29 @@ class App:
                 kind, *args = self.events.get_nowait()
             except queue.Empty:
                 break
-            if kind == "picked" and self.picker is not None:
+            if kind == "escape":
+                # The fail-safe comes first; Esc also cancels a pick or a hotkey recording.
+                if self.engine.running:
+                    self.stop("Esc pressed")
+                if self.picker is not None:
+                    self._end_pick()
+                if self.dialog is not None and self.dialog.recording:
+                    self.dialog.cancel_recording()
+            elif kind == "picked" and self.picker is not None:
                 self._end_pick(args)
-            elif kind == "escape" and self.picker is not None:
-                self._end_pick()
-            elif kind == "escape" and self.engine.running:
-                self.stop("Esc pressed")
+            elif kind == "recorded" and self.dialog is not None:
+                self.dialog.key_pressed(args[0])
             elif kind == "toggle" and self.picker is None:
                 self.toggle()
         self._refresh()
-        self.root.after(POLL_MS, self._poll)
+        self._poll_job = self.root.after(POLL_MS, self._poll)
 
     def _refresh(self):
         running = self.engine.running
         self.start_button.state(["disabled" if running else "!disabled"])
         self.stop_button.state(["!disabled" if running else "disabled"])
         _set_enabled(self.pick_button, not running)
+        _set_enabled(self.hotkey_button, not running)
         if self.error and not running:
             self.status.config(text=self.error, foreground=ERROR_COLOR)
             return

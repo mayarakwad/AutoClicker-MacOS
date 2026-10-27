@@ -22,7 +22,7 @@ def enable_dpi_awareness():
 def main():
     enable_dpi_awareness()
     root = tk.Tk()
-    App(root)
+    App(root)  # loads settings from %APPDATA%\AutoClicker\settings.json
     root.mainloop()
 
 

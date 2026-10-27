@@ -10,7 +10,7 @@ Built in phases; the user tests each phase before the next one starts and says "
 
 1. Core engine, basic UI, F6 toggle (done)
 2. Random offset ± N ms (default 40), double click, Pick location (click anywhere to capture X/Y), repeat N times vs until stopped (done)
-3. Hotkey setting dialog; settings saved as JSON in `%APPDATA%` and restored on launch
+3. Hotkey setting dialog; settings saved as JSON in `%APPDATA%` and restored on launch (done)
 4. Record & Playback: record clicks with positions and delays, play once or loop
 5. `build.bat` → single `dist\AutoClicker.exe` via PyInstaller `--onefile --windowed`
 
@@ -31,8 +31,16 @@ Python and Git were installed mid-session and may not be on PATH yet. Use the ve
 
 Several threads; only the main thread touches tkinter:
 
-- **Main thread (`ui.App`)**: owns the Tk window. A `root.after` loop every 50 ms (`_poll`) drains `App.events` (a `queue.Queue` of tuples: `("toggle",)`, `("escape",)`, `("picked", x, y)`) and refreshes buttons and the status line from the engine's state. Engine state is polled, never pushed via callbacks.
-- **Hotkey thread (`hotkeys.HotkeyListener`)**: a pynput keyboard listener. It only observes keys, never suppresses them, so Esc and F6 still reach other apps. Callbacks only queue events, and held-key auto-repeat is ignored. `key_name()` gives the string form used for hotkey names (`"f6"`).
+- **Main thread (`ui.App`)**: owns the Tk window. A `root.after` loop every 50 ms (`_poll`) drains `App.events` and refreshes buttons and the status line from the engine's state. Engine state is polled, never pushed via callbacks.
+  - `App.events` is a `queue.Queue` of tuples: `("toggle",)`, `("escape",)`, `("picked", x, y)`, `("recorded", combo)`.
+  - Esc always stops a running engine first (fail-safe priority), then also cancels a pick or a hotkey recording.
+  - `close()` cancels the pending `after` jobs.
+- **Hotkey thread (`hotkeys.HotkeyListener`)**: a pynput keyboard listener. It only observes keys, never suppresses them, so Esc and the hotkey still reach other apps. Callbacks only queue events, and held-key auto-repeat is ignored.
+  - Keys are named from the Windows virtual-key code (`vk_name`), never pynput's `char`, because Ctrl+A reports char `'\x01'`. Left and right modifiers share one name.
+  - A hotkey is a canonical combo string: modifiers in `MODIFIER_ORDER`, then the key (`"ctrl+shift+f6"`). The press must match the modifiers exactly.
+  - Modifiers come from `GetAsyncKeyState` at press time (`held_modifiers`, injectable for tests), not tracked key-ups, so a missed release can't leave Ctrl stuck.
+  - `combo_problem()` rejects Esc (fail-safe) and typing keys without Ctrl/Alt.
+  - `record(cb)` makes the next non-modifier press go to `cb` instead of toggling. The Hotkey setting dialog (`hotkey_dialog.HotkeyDialog`) records through this global listener, not Tk key events, so a recorded name is exactly what the listener matches. App forwards `("recorded", combo)` to `dialog.key_pressed`.
 - **Pick hook thread (`mouse_io.PointPicker`)**: exists only while picking. It's a pynput mouse listener whose `win32_event_filter` captures the next left button down, swallows the down/up pair system-wide with `suppress_event()`, then stops itself. While picking, the main window is withdrawn, a cursor-following tooltip shows X/Y, F6 is ignored and Esc cancels.
 - **Click thread (`engine.ClickEngine`)**: has no UI imports. The UI calls `start(ClickConfig)` / `stop(reason)` and reads `running`, `clicks` and `stop_reason`. `clicks` counts actions, so a double click counts once, and `repeat` compares against it. The top-left-corner fail-safe lives in the engine loop; Esc is handled by the UI as `stop("Esc pressed")`.
 
@@ -42,6 +50,13 @@ Several threads; only the main thread touches tkinter:
 - Keep `click_at` a single batch. Separate SetCursorPos + SendInput calls race (the click can land after the cursor is restored).
 - Restoring the cursor is deliberate: if the cursor stayed parked at X/Y, the corner fail-safe would be unreachable at short intervals.
 - `normalize()` rounds up because Windows maps absolute coordinates back with `n * size // 65536`. This was verified pixel-exact on the user's 1920×1080 screen.
+
+Settings are handled as follows:
+- `settings.py` is dict in, dict out, written atomically to `%APPDATA%\AutoClicker\settings.json`. A missing or corrupt file gives `{}`.
+- What counts as a valid value lives in the UI: `App._setting_vars()` maps each key to its Tk variable and a validity check. `_apply_settings` skips missing or invalid values, which keep their defaults.
+- Settings are saved on Start, on hotkey OK and on close.
+- To add a setting, add it to `_setting_vars`.
+- `App(root, settings_path=...)` lets tests use a temp file. Tests must never write the real `%APPDATA%` file.
 
 The UI enables the offset, repeat and X/Y entries through `trace_add` on their option variables, not widget `command=`, so values set in code (e.g. restored settings) update the entries too. X/Y allow a leading minus (screens left of or above the main one) and are checked with `on_screen()`. Every other number field accepts digits only.
 

@@ -3,7 +3,7 @@
 A lightweight Windows auto clicker modeled on OP Auto Clicker.
 Python 3.12, tkinter for the window, pynput for mouse control and global hotkeys.
 
-**Progress:** Phase 2 of 5 (core clicking, F6, fail-safe, random offset, double click, pick location, repeat count).
+**Progress:** Phase 3 of 5 (core clicking, F6, fail-safe, random offset, double click, pick location, repeat count, hotkey setting, saved settings).
 
 ## Run from source
 
@@ -26,8 +26,13 @@ Use `python` instead of `pythonw` to keep a console window open for error messag
   - With a picked location, the cursor jumps to X/Y for each click and straight back, so you can still move the mouse.
   - X/Y can be negative on screens left of or above the main one.
 - Press **Start** or **F6**. Press **Stop** or **F6** again to stop. F6 works even when the window is minimized or another app has focus.
+- **Hotkey setting:** change F6 to another key or combination (for example F8 or Ctrl+Shift+S).
+  - Click **Change**, press the new key, then **OK**. **Default (F6)** puts it back.
+  - Esc is reserved for the fail-safe.
+  - Letters, digits, Space and Enter need Ctrl or Alt. Keys still reach other apps, so a plain letter would start clicking while you type.
 - **Fail-safe:** press **Esc**, or move the mouse into the top-left corner of the main screen, and clicking stops immediately.
 - The status line shows Running/Stopped, the click count, and why clicking stopped.
+- **Saved settings:** settings are saved to `%APPDATA%\AutoClicker\settings.json` when you press Start, change the hotkey, or close the window, and restored on the next launch. Delete that file to go back to defaults. Missing or invalid values fall back to defaults.
 
 Test stopping (F6, Esc, the corner) with a slow interval before trying very short ones.
 
@@ -47,5 +52,7 @@ The tests use a fake mouse and send no real input.
 | `ui.py` | tkinter window. Validates input and starts/stops the engine. |
 | `engine.py` | Click loop on a background thread. No UI code. |
 | `mouse_io.py` | Clicking (pynput, plus one SendInput batch for clicks at X/Y), Pick location capture, on-screen check. |
-| `hotkeys.py` | Global F6 / Esc listener (pynput). |
+| `hotkeys.py` | Global start/stop hotkey and Esc listener (pynput), key names and combos. |
+| `hotkey_dialog.py` | Hotkey setting dialog. |
+| `settings.py` | Reads and writes the settings JSON file. |
 | `tests/` | Unit tests. |
