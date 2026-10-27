@@ -8,6 +8,8 @@ from engine import ClickConfig, ClickEngine
 from hotkey_dialog import HotkeyDialog
 from hotkeys import DEFAULT_HOTKEY, HotkeyListener, combo_problem, display_name
 from mouse_io import PointPicker, on_screen
+from recorder import dump_steps, load_steps
+from recorder_window import RecorderWindow
 
 # How often the window checks hotkey events and engine status.
 POLL_MS = 50
@@ -46,10 +48,13 @@ class App:
         self.picker = None
         self.tip = None
         self.dialog = None
+        self.recorder_window = None
         saved = settings.load(settings_path)
         hotkey = saved.get("hotkey")
         if not isinstance(hotkey, str) or combo_problem(hotkey):
             hotkey = DEFAULT_HOTKEY
+        self.steps = load_steps(saved.get("recording"))
+        self.playback_loop = saved.get("playback_loop") is True
         # Hotkeys and the picker fire on pynput's threads; queue their events
         # as tuples so tkinter is only touched from the main thread.
         self.events = queue.Queue()
@@ -143,6 +148,8 @@ class App:
         self.stop_button.grid(row=3, column=1, sticky="ew", padx=(4, 0), pady=(10, 0), ipady=6)
         self.hotkey_button = ttk.Button(outer, text="Hotkey setting", command=self.open_hotkey_dialog)
         self.hotkey_button.grid(row=4, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
+        self.recorder_button = ttk.Button(outer, text="Record & Playback", command=self.open_recorder)
+        self.recorder_button.grid(row=4, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
         self._update_hotkey_labels()
 
         self.status = ttk.Label(outer, anchor="w")
@@ -194,6 +201,8 @@ class App:
     def _save_settings(self):
         data = {key: var.get() for key, (var, _) in self._setting_vars().items()}
         data["hotkey"] = self.hotkeys.hotkey
+        data["recording"] = dump_steps(self.steps)
+        data["playback_loop"] = self.playback_loop
         try:
             settings.save(data, self.settings_path)
         except OSError:
@@ -318,7 +327,24 @@ class App:
             self._update_hotkey_labels()
             self._save_settings()
 
+    def open_recorder(self):
+        if self.engine.running or self.recorder_window is not None:
+            return
+        self.recorder_window = RecorderWindow(
+            self.root, self.engine, self.steps, self.playback_loop,
+            hotkey=display_name(self.hotkeys.hotkey), post=self.events.put,
+            on_close=self._recorder_closed,
+        )
+
+    def _recorder_closed(self, steps, loop):
+        self.recorder_window = None
+        self.steps = steps
+        self.playback_loop = loop
+        self._save_settings()
+
     def close(self):
+        if self.recorder_window is not None:
+            self.recorder_window.close()
         if self.picker is not None:
             self._end_pick()
         self.engine.stop()
@@ -334,19 +360,28 @@ class App:
             except queue.Empty:
                 break
             if kind == "escape":
-                # The fail-safe comes first; Esc also cancels a pick or a hotkey recording.
+                # The fail-safe comes first (it also stops playback); Esc also
+                # cancels a pick, a hotkey recording or a click recording.
                 if self.engine.running:
                     self.stop("Esc pressed")
                 if self.picker is not None:
                     self._end_pick()
                 if self.dialog is not None and self.dialog.recording:
                     self.dialog.cancel_recording()
+                if self.recorder_window is not None and self.recorder_window.recording:
+                    self.recorder_window.stop_recording()
             elif kind == "picked" and self.picker is not None:
                 self._end_pick(args)
             elif kind == "recorded" and self.dialog is not None:
                 self.dialog.key_pressed(args[0])
+            elif kind == "step" and self.recorder_window is not None:
+                self.recorder_window.add_step(args[0])
+            elif kind == "toggle" and self.recorder_window is not None:
+                self.recorder_window.toggle()
             elif kind == "toggle" and self.picker is None:
                 self.toggle()
+        if self.recorder_window is not None:
+            self.recorder_window.refresh()
         self._refresh()
         self._poll_job = self.root.after(POLL_MS, self._poll)
 
@@ -356,6 +391,7 @@ class App:
         self.stop_button.state(["!disabled" if running else "disabled"])
         _set_enabled(self.pick_button, not running)
         _set_enabled(self.hotkey_button, not running)
+        _set_enabled(self.recorder_button, not running)
         if self.error and not running:
             self.status.config(text=self.error, foreground=ERROR_COLOR)
             return

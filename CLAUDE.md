@@ -11,7 +11,7 @@ Built in phases; the user tests each phase before the next one starts and says "
 1. Core engine, basic UI, F6 toggle (done)
 2. Random offset ± N ms (default 40), double click, Pick location (click anywhere to capture X/Y), repeat N times vs until stopped (done)
 3. Hotkey setting dialog; settings saved as JSON in `%APPDATA%` and restored on launch (done)
-4. Record & Playback: record clicks with positions and delays, play once or loop
+4. Record & Playback: record clicks with positions and delays, play once or loop (done)
 5. `build.bat` → single `dist\AutoClicker.exe` via PyInstaller `--onefile --windowed`
 
 Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 1 ms); the status line shows Running/Stopped and the click count.
@@ -32,8 +32,9 @@ Python and Git were installed mid-session and may not be on PATH yet. Use the ve
 Several threads; only the main thread touches tkinter:
 
 - **Main thread (`ui.App`)**: owns the Tk window. A `root.after` loop every 50 ms (`_poll`) drains `App.events` and refreshes buttons and the status line from the engine's state. Engine state is polled, never pushed via callbacks.
-  - `App.events` is a `queue.Queue` of tuples: `("toggle",)`, `("escape",)`, `("picked", x, y)`, `("recorded", combo)`.
-  - Esc always stops a running engine first (fail-safe priority), then also cancels a pick or a hotkey recording.
+  - `App.events` is a `queue.Queue` of tuples: `("toggle",)`, `("escape",)`, `("picked", x, y)`, `("recorded", combo)` (hotkey dialog), `("step", Step)` (click recorder).
+  - Esc always stops a running engine first (fail-safe priority, which also covers playback), then also cancels a pick, a hotkey recording or a click recording.
+  - While the Record & Playback window is open, `"toggle"` goes to `RecorderWindow.toggle()` (play/stop) instead of the normal clicker, and `_poll` calls its `refresh()`.
   - `close()` cancels the pending `after` jobs.
 - **Hotkey thread (`hotkeys.HotkeyListener`)**: a pynput keyboard listener. It only observes keys, never suppresses them, so Esc and the hotkey still reach other apps. Callbacks only queue events, and held-key auto-repeat is ignored.
   - Keys are named from the Windows virtual-key code (`vk_name`), never pynput's `char`, because Ctrl+A reports char `'\x01'`. Left and right modifiers share one name.
@@ -42,7 +43,14 @@ Several threads; only the main thread touches tkinter:
   - `combo_problem()` rejects Esc (fail-safe) and typing keys without Ctrl/Alt.
   - `record(cb)` makes the next non-modifier press go to `cb` instead of toggling. The Hotkey setting dialog (`hotkey_dialog.HotkeyDialog`) records through this global listener, not Tk key events, so a recorded name is exactly what the listener matches. App forwards `("recorded", combo)` to `dialog.key_pressed`.
 - **Pick hook thread (`mouse_io.PointPicker`)**: exists only while picking. It's a pynput mouse listener whose `win32_event_filter` captures the next left button down, swallows the down/up pair system-wide with `suppress_event()`, then stops itself. While picking, the main window is withdrawn, a cursor-following tooltip shows X/Y, F6 is ignored and Esc cancels.
-- **Click thread (`engine.ClickEngine`)**: has no UI imports. The UI calls `start(ClickConfig)` / `stop(reason)` and reads `running`, `clicks` and `stop_reason`. `clicks` counts actions, so a double click counts once, and `repeat` compares against it. The top-left-corner fail-safe lives in the engine loop; Esc is handled by the UI as `stop("Esc pressed")`.
+- **Click recorder thread (`recorder.ClickRecorder`)**: exists only while recording. It's a pynput mouse listener that turns each button press into a `Step(delay_ms, button, x, y)`, with the delay measured since the previous press (or since `start()`).
+  - It doesn't suppress clicks.
+  - It skips presses on this process's own windows (`mouse_io.is_own_window`, which compares the PID of the window under the point).
+  - `RecorderWindow` (modal) makes itself topmost while recording, so its Stop button is reachable without a taskbar click that would get recorded.
+- **Click thread (`engine.ClickEngine`)**: has no UI imports. The UI calls `start(config)` / `stop(reason)` and reads `running`, `clicks` and `stop_reason`.
+  - `start(ClickConfig)` runs `_run`, interval clicking. `clicks` counts actions, so a double click counts once, and `repeat` compares against it.
+  - `start(PlaybackConfig(steps, loop))` runs `_play`. Each step waits its `delay_ms` (deadline-based) then calls `click_at`, so playback returns the cursor too. The recorder window uses the App's single engine, so the main status line shows playback as Running.
+  - The top-left-corner fail-safe lives in `_wait_until`, shared by both run kinds. Esc is handled by the UI as `stop("Esc pressed")`.
 
 `mouse_io.Mouse` is the engine's output:
 - `click()` at the cursor goes through pynput.
@@ -54,8 +62,9 @@ Several threads; only the main thread touches tkinter:
 Settings are handled as follows:
 - `settings.py` is dict in, dict out, written atomically to `%APPDATA%\AutoClicker\settings.json`. A missing or corrupt file gives `{}`.
 - What counts as a valid value lives in the UI: `App._setting_vars()` maps each key to its Tk variable and a validity check. `_apply_settings` skips missing or invalid values, which keep their defaults.
-- Settings are saved on Start, on hotkey OK and on close.
-- To add a setting, add it to `_setting_vars`.
+- Settings are saved on Start, on hotkey OK, when the recorder window closes, and on app close.
+- To add a setting backed by a Tk variable, add it to `_setting_vars`.
+- The recording is not a Tk variable. It lives in `App.steps` / `App.playback_loop` and is stored as `"recording"` (via `recorder.dump_steps` / `load_steps`, which is all-or-nothing: any bad item gives `[]`) and `"playback_loop"`.
 - `App(root, settings_path=...)` lets tests use a temp file. Tests must never write the real `%APPDATA%` file.
 
 The UI enables the offset, repeat and X/Y entries through `trace_add` on their option variables, not widget `command=`, so values set in code (e.g. restored settings) update the entries too. X/Y allow a leading minus (screens left of or above the main one) and are checked with `on_screen()`. Every other number field accepts digits only.

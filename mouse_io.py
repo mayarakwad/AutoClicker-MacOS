@@ -6,11 +6,13 @@
   which also keeps the top-left-corner fail-safe reachable.
 - PointPicker: captures the next left click anywhere on screen and swallows it.
 - on_screen(): whether a point is on any monitor.
+- is_own_window(): whether the window at a point belongs to this app.
 
 All coordinates are physical pixels (main.py makes the process DPI-aware).
 """
 import ctypes
 import ctypes.wintypes as wt
+import os
 
 from pynput import mouse
 from pynput.mouse import Button
@@ -47,10 +49,20 @@ user32.SendInput.argtypes = (wt.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 user32.SendInput.restype = wt.UINT
 user32.MonitorFromPoint.argtypes = (wt.POINT, wt.DWORD)
 user32.MonitorFromPoint.restype = wt.HMONITOR
+user32.WindowFromPoint.argtypes = (wt.POINT,)
+user32.WindowFromPoint.restype = wt.HWND
+user32.GetWindowThreadProcessId.argtypes = (wt.HWND, ctypes.POINTER(wt.DWORD))
+user32.GetWindowThreadProcessId.restype = wt.DWORD
 
 
 def on_screen(x, y):
     return bool(user32.MonitorFromPoint(wt.POINT(x, y), MONITOR_DEFAULTTONULL))
+
+
+def is_own_window(x, y):
+    pid = wt.DWORD()
+    user32.GetWindowThreadProcessId(user32.WindowFromPoint(wt.POINT(x, y)), ctypes.byref(pid))
+    return pid.value == os.getpid()
 
 
 def normalize(value, origin, size):

@@ -3,7 +3,7 @@
 A lightweight Windows auto clicker modeled on OP Auto Clicker.
 Python 3.12, tkinter for the window, pynput for mouse control and global hotkeys.
 
-**Progress:** Phase 3 of 5 (core clicking, F6, fail-safe, random offset, double click, pick location, repeat count, hotkey setting, saved settings).
+**Progress:** Phase 4 of 5 (all features done; packaging as an .exe comes next).
 
 ## Run from source
 
@@ -30,9 +30,14 @@ Use `python` instead of `pythonw` to keep a console window open for error messag
   - Click **Change**, press the new key, then **OK**. **Default (F6)** puts it back.
   - Esc is reserved for the fail-safe.
   - Letters, digits, Space and Enter need Ctrl or Alt. Keys still reach other apps, so a plain letter would start clicking while you type.
+- **Record & Playback:** opens a window for recording a sequence of clicks and playing it back.
+  - **Recording:** click **Record**, then click anywhere on screen. Each click's button, position and delay since the previous click is listed. The first delay counts from pressing Record. Clicks on AutoClicker's own windows aren't recorded, and the window stays on top while recording so **Stop** is always reachable. F6 or Esc also stops recording.
+  - **Playback:** choose **Once** or **Loop until stopped**, then press **Play** or F6. The step being played is highlighted. F6, Esc or the top-left corner stops it. Like Pick location, the cursor jumps to each point and straight back.
+  - While this window is open, F6 controls playback instead of the normal clicker.
+  - The last recording is saved with your settings.
 - **Fail-safe:** press **Esc**, or move the mouse into the top-left corner of the main screen, and clicking stops immediately.
 - The status line shows Running/Stopped, the click count, and why clicking stopped.
-- **Saved settings:** settings are saved to `%APPDATA%\AutoClicker\settings.json` when you press Start, change the hotkey, or close the window, and restored on the next launch. Delete that file to go back to defaults. Missing or invalid values fall back to defaults.
+- **Saved settings:** all fields, the hotkey and the last recording are saved to `%APPDATA%\AutoClicker\settings.json` and restored on the next launch. Saving happens when you press Start, change the hotkey, close the Record & Playback window, or close the app. Delete that file to go back to defaults. Missing or invalid values fall back to defaults.
 
 Test stopping (F6, Esc, the corner) with a slow interval before trying very short ones.
 
@@ -50,7 +55,9 @@ The tests use a fake mouse and send no real input.
 |---|---|
 | `main.py` | Entry point. Turns on DPI awareness, then opens the window. |
 | `ui.py` | tkinter window. Validates input and starts/stops the engine. |
-| `engine.py` | Click loop on a background thread. No UI code. |
+| `engine.py` | Clicking and playback on a background thread. No UI code. |
+| `recorder.py` | Records clicks anywhere on screen; converts recordings to and from JSON. |
+| `recorder_window.py` | Record & Playback window. |
 | `mouse_io.py` | Clicking (pynput, plus one SendInput batch for clicks at X/Y), Pick location capture, on-screen check. |
 | `hotkeys.py` | Global start/stop hotkey and Esc listener (pynput), key names and combos. |
 | `hotkey_dialog.py` | Hotkey setting dialog. |

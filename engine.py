@@ -1,8 +1,9 @@
-"""Click engine: runs the clicking loop on a background thread.
+"""Click engine: runs clicking on a background thread.
 
-Contains no UI code. The window starts and stops the engine and polls
-`running`, `clicks` and `stop_reason` to show status. `clicks` counts click
-actions, so a double click counts once.
+Two kinds of run: ClickConfig (repeat one click on an interval) and
+PlaybackConfig (replay recorded steps). Contains no UI code. The window
+starts and stops the engine and polls `running`, `clicks` and `stop_reason`
+to show status. `clicks` counts click actions, so a double click counts once.
 """
 import random
 import threading
@@ -34,6 +35,20 @@ class ClickConfig:
     position: tuple = None      # (x, y) to click at; None = wherever the cursor is
 
 
+@dataclass
+class Step:
+    delay_ms: int  # wait before this click: since the previous one, or since playback started
+    button: str
+    x: int
+    y: int
+
+
+@dataclass
+class PlaybackConfig:
+    steps: list
+    loop: bool = False
+
+
 def next_delay(config):
     """Seconds until the next click, with the random offset applied (never under 1 ms)."""
     ms = config.interval_ms
@@ -57,18 +72,27 @@ class ClickEngine:
     def start(self, config):
         if self.running:
             return
-        if config.interval_ms < 1:
-            raise ValueError("Interval must be at least 1 ms")
-        if config.random_offset_ms < 0:
-            raise ValueError("Random offset can't be negative")
-        if config.repeat < 0:
-            raise ValueError("Repeat count can't be negative")
-        if config.button not in BUTTONS:
-            raise ValueError(f"Unknown mouse button: {config.button!r}")
+        if isinstance(config, PlaybackConfig):
+            if not config.steps:
+                raise ValueError("Nothing recorded")
+            for step in config.steps:
+                if step.delay_ms < 1 or step.button not in BUTTONS:
+                    raise ValueError(f"Bad recorded step: {step}")
+            target = self._play
+        else:
+            if config.interval_ms < 1:
+                raise ValueError("Interval must be at least 1 ms")
+            if config.random_offset_ms < 0:
+                raise ValueError("Random offset can't be negative")
+            if config.repeat < 0:
+                raise ValueError("Repeat count can't be negative")
+            if config.button not in BUTTONS:
+                raise ValueError(f"Unknown mouse button: {config.button!r}")
+            target = self._run
         self.clicks = 0
         self.stop_reason = ""
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, args=(config,), daemon=True)
+        self._thread = threading.Thread(target=target, args=(config,), daemon=True)
         self._thread.start()
 
     def stop(self, reason=""):
@@ -100,6 +124,21 @@ class ClickEngine:
                 # Fell behind (busy system): carry on from now instead of
                 # firing a burst of clicks to catch up.
                 next_click = now
+
+    def _play(self, playback):
+        steps = list(playback.steps)
+        next_click = time.perf_counter()
+        while True:
+            for step in steps:
+                next_click += step.delay_ms / 1000
+                if not self._wait_until(next_click):
+                    return
+                self._mouse.click_at(step.x, step.y, BUTTONS[step.button])
+                self.clicks += 1
+                next_click = max(next_click, time.perf_counter())  # no catch-up bursts
+            if not playback.loop:
+                self.stop_reason = "finished"
+                return
 
     def _wait_until(self, deadline):
         """Sleep until `deadline`. Returns False if stopped or the fail-safe tripped."""
