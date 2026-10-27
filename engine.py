@@ -1,13 +1,17 @@
 """Click engine: runs the clicking loop on a background thread.
 
 Contains no UI code. The window starts and stops the engine and polls
-`running`, `clicks` and `stop_reason` to show status.
+`running`, `clicks` and `stop_reason` to show status. `clicks` counts click
+actions, so a double click counts once.
 """
+import random
 import threading
 import time
 from dataclasses import dataclass
 
-from pynput.mouse import Button, Controller
+from pynput.mouse import Button
+
+from mouse_io import Mouse
 
 BUTTONS = {"left": Button.left, "right": Button.right, "middle": Button.middle}
 
@@ -23,12 +27,24 @@ POLL_SECONDS = 0.05
 @dataclass
 class ClickConfig:
     interval_ms: int = 100
+    random_offset_ms: int = 0   # each delay is the interval ± up to this much
     button: str = "left"
+    double: bool = False
+    repeat: int = 0             # clicks before stopping; 0 = until stopped
+    position: tuple = None      # (x, y) to click at; None = wherever the cursor is
+
+
+def next_delay(config):
+    """Seconds until the next click, with the random offset applied (never under 1 ms)."""
+    ms = config.interval_ms
+    if config.random_offset_ms:
+        ms += random.randint(-config.random_offset_ms, config.random_offset_ms)
+    return max(ms, 1) / 1000
 
 
 class ClickEngine:
     def __init__(self, mouse=None):
-        self._mouse = mouse or Controller()
+        self._mouse = mouse or Mouse()
         self._thread = None
         self._stop_event = threading.Event()
         self.clicks = 0
@@ -43,6 +59,10 @@ class ClickEngine:
             return
         if config.interval_ms < 1:
             raise ValueError("Interval must be at least 1 ms")
+        if config.random_offset_ms < 0:
+            raise ValueError("Random offset can't be negative")
+        if config.repeat < 0:
+            raise ValueError("Repeat count can't be negative")
         if config.button not in BUTTONS:
             raise ValueError(f"Unknown mouse button: {config.button!r}")
         self.clicks = 0
@@ -63,12 +83,18 @@ class ClickEngine:
 
     def _run(self, config):
         button = BUTTONS[config.button]
-        interval = config.interval_ms / 1000
-        next_click = time.perf_counter() + interval
+        count = 2 if config.double else 1
+        next_click = time.perf_counter() + next_delay(config)
         while self._wait_until(next_click):
-            self._mouse.click(button)
+            if config.position is None:
+                self._mouse.click(button, count)
+            else:
+                self._mouse.click_at(*config.position, button, count)
             self.clicks += 1
-            next_click += interval
+            if config.repeat and self.clicks >= config.repeat:
+                self.stop_reason = "finished"
+                return
+            next_click += next_delay(config)
             now = time.perf_counter()
             if next_click < now:
                 # Fell behind (busy system): carry on from now instead of

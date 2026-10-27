@@ -9,7 +9,7 @@ Windows desktop auto clicker modeled on OP Auto Clicker. Python 3.12 + tkinter (
 Built in phases; the user tests each phase before the next one starts and says "commit this phase" when it works. Don't commit until they do, and stop after each phase.
 
 1. Core engine, basic UI, F6 toggle (done)
-2. Random offset ± N ms (default 40), double click, Pick location (click anywhere to capture X/Y), repeat N times vs until stopped
+2. Random offset ± N ms (default 40), double click, Pick location (click anywhere to capture X/Y), repeat N times vs until stopped (done)
 3. Hotkey setting dialog; settings saved as JSON in `%APPDATA%` and restored on launch
 4. Record & Playback: record clicks with positions and delays, play once or loop
 5. `build.bat` → single `dist\AutoClicker.exe` via PyInstaller `--onefile --windowed`
@@ -29,11 +29,21 @@ Python and Git were installed mid-session and may not be on PATH yet. Use the ve
 
 ## Architecture
 
-Three threads; only the main thread touches tkinter:
+Several threads; only the main thread touches tkinter:
 
-- **Main thread (`ui.App`)**: owns the Tk window. A `root.after` loop every 50 ms (`_poll`) drains `App.events` (a `queue.Queue`) and refreshes buttons and the status line from the engine's state. Engine state is polled, never pushed via callbacks.
-- **Hotkey thread (`hotkeys.HotkeyListener`)**: a pynput keyboard listener. It only observes keys, never suppresses them, so Esc and F6 still reach other apps. Callbacks just put `"toggle"` / `"escape"` on the queue, and held-key auto-repeat is ignored. `key_name()` gives the string form used for hotkey names (`"f6"`).
-- **Click thread (`engine.ClickEngine`)**: has no UI imports. The UI calls `start(ClickConfig)` / `stop(reason)` and reads `running`, `clicks` and `stop_reason`. The top-left-corner fail-safe lives in the engine loop; Esc is handled by the UI as `stop("Esc pressed")`.
+- **Main thread (`ui.App`)**: owns the Tk window. A `root.after` loop every 50 ms (`_poll`) drains `App.events` (a `queue.Queue` of tuples: `("toggle",)`, `("escape",)`, `("picked", x, y)`) and refreshes buttons and the status line from the engine's state. Engine state is polled, never pushed via callbacks.
+- **Hotkey thread (`hotkeys.HotkeyListener`)**: a pynput keyboard listener. It only observes keys, never suppresses them, so Esc and F6 still reach other apps. Callbacks only queue events, and held-key auto-repeat is ignored. `key_name()` gives the string form used for hotkey names (`"f6"`).
+- **Pick hook thread (`mouse_io.PointPicker`)**: exists only while picking. It's a pynput mouse listener whose `win32_event_filter` captures the next left button down, swallows the down/up pair system-wide with `suppress_event()`, then stops itself. While picking, the main window is withdrawn, a cursor-following tooltip shows X/Y, F6 is ignored and Esc cancels.
+- **Click thread (`engine.ClickEngine`)**: has no UI imports. The UI calls `start(ClickConfig)` / `stop(reason)` and reads `running`, `clicks` and `stop_reason`. `clicks` counts actions, so a double click counts once, and `repeat` compares against it. The top-left-corner fail-safe lives in the engine loop; Esc is handled by the UI as `stop("Esc pressed")`.
+
+`mouse_io.Mouse` is the engine's output:
+- `click()` at the cursor goes through pynput.
+- `click_at(x, y)` sends one SendInput batch: absolute move to X/Y, button down/up (×2 for double), then a move back to where the cursor was.
+- Keep `click_at` a single batch. Separate SetCursorPos + SendInput calls race (the click can land after the cursor is restored).
+- Restoring the cursor is deliberate: if the cursor stayed parked at X/Y, the corner fail-safe would be unreachable at short intervals.
+- `normalize()` rounds up because Windows maps absolute coordinates back with `n * size // 65536`. This was verified pixel-exact on the user's 1920×1080 screen.
+
+The UI enables the offset, repeat and X/Y entries through `trace_add` on their option variables, not widget `command=`, so values set in code (e.g. restored settings) update the entries too. X/Y allow a leading minus (screens left of or above the main one) and are checked with `on_screen()`. Every other number field accepts digits only.
 
 Engine timing details that are easy to break:
 - Clicks are scheduled against `perf_counter` deadlines (no drift, no catch-up bursts).
@@ -41,4 +51,4 @@ Engine timing details that are easy to break:
 
 `main.enable_dpi_awareness()` must run before the Tk root is created. pynput does not set DPI awareness itself, and without it cursor coordinates are scaled wrongly on 125%/150% displays (this matters for Pick location and recording).
 
-Tests inject a fake mouse via `ClickEngine(mouse=...)`, which must provide `position` and `click(button, count=1)`. Tests must never send real input.
+Tests inject a fake mouse via `ClickEngine(mouse=...)`, which must provide `position`, `click(button, count=1)` and `click_at(x, y, button, count=1)`. Tests must never send real input.
