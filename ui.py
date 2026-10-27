@@ -1,25 +1,29 @@
 """Main window (tkinter). Drives the click engine; contains no clicking logic."""
 import queue
+import re
 import tkinter as tk
 from tkinter import ttk
 
 import settings
+import sounds
+import theme
 from engine import ClickConfig, ClickEngine
 from hotkey_dialog import HotkeyDialog
 from hotkeys import DEFAULT_HOTKEY, HotkeyListener, combo_problem, display_name
 from mouse_io import PointPicker, on_screen
+from personalize_dialog import DEFAULTS as LOOK_DEFAULTS, MIN_OPACITY, PersonalizeDialog
 from recorder import dump_steps, load_steps
 from recorder_window import RecorderWindow
 
 # How often the window checks hotkey events and engine status.
 POLL_MS = 50
+# How often (in polls) a "Same as Windows" theme checks for a Windows change.
+SYSTEM_THEME_POLLS = 40
 # How often the pick tooltip follows the cursor.
 TIP_MS = 30
 
 BUTTON_NAMES = ["Left", "Right", "Middle"]
 CLICK_TYPES = ["Single", "Double"]
-RUNNING_COLOR = "#107c10"
-ERROR_COLOR = "#c42b1c"
 
 
 def _is_digits(text):
@@ -49,6 +53,15 @@ class App:
         self.tip = None
         self.dialog = None
         self.recorder_window = None
+        self.personalize = None
+        self.was_running = False
+        self.polls = 0
+        self.window_pos = None
+        # Personalization; the Personalize dialog edits these directly.
+        self.theme_mode = tk.StringVar(value=LOOK_DEFAULTS["theme"])
+        self.always_on_top = tk.BooleanVar(value=LOOK_DEFAULTS["always_on_top"])
+        self.opacity = tk.IntVar(value=LOOK_DEFAULTS["opacity"])
+        self.sounds = tk.BooleanVar(value=LOOK_DEFAULTS["sounds"])
         saved = settings.load(settings_path)
         hotkey = saved.get("hotkey")
         if not isinstance(hotkey, str) or combo_problem(hotkey):
@@ -65,6 +78,8 @@ class App:
         )
         self._build()
         self._apply_settings(saved)
+        self._restore_position(saved)
+        self._follow_look()
         self.hotkeys.start()
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._poll()
@@ -146,10 +161,14 @@ class App:
         self.start_button.grid(row=3, column=0, sticky="ew", padx=(0, 4), pady=(10, 0), ipady=6)
         self.stop_button = ttk.Button(outer, command=self.stop)
         self.stop_button.grid(row=3, column=1, sticky="ew", padx=(4, 0), pady=(10, 0), ipady=6)
-        self.hotkey_button = ttk.Button(outer, text="Hotkey setting", command=self.open_hotkey_dialog)
-        self.hotkey_button.grid(row=4, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
-        self.recorder_button = ttk.Button(outer, text="Record & Playback", command=self.open_recorder)
-        self.recorder_button.grid(row=4, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
+        tools = ttk.Frame(outer)
+        tools.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        tools.columnconfigure((0, 1, 2), weight=1, uniform="tool")
+        self.hotkey_button = ttk.Button(tools, text="Hotkey setting", command=self.open_hotkey_dialog)
+        self.recorder_button = ttk.Button(tools, text="Record & Playback", command=self.open_recorder)
+        self.personalize_button = ttk.Button(tools, text="Personalize", command=self.open_personalize)
+        for i, button in enumerate((self.hotkey_button, self.recorder_button, self.personalize_button)):
+            button.grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else 6, 0))
         self._update_hotkey_labels()
 
         self.status = ttk.Label(outer, anchor="w")
@@ -176,12 +195,15 @@ class App:
         def one_of(*options):
             return lambda v: isinstance(v, str) and v in options
 
+        def flag(v):
+            return isinstance(v, bool)
+
         return {
             "hours": (self.hours, digits),
             "mins": (self.mins, digits),
             "secs": (self.secs, digits),
             "millis": (self.millis, digits),
-            "use_offset": (self.use_offset, lambda v: isinstance(v, bool)),
+            "use_offset": (self.use_offset, flag),
             "offset": (self.offset, digits),
             "button": (self.button, one_of(*BUTTON_NAMES)),
             "click_type": (self.click_type, one_of(*CLICK_TYPES)),
@@ -190,6 +212,10 @@ class App:
             "position_mode": (self.position_mode, one_of("current", "pick")),
             "x": (self.x, coordinate),
             "y": (self.y, coordinate),
+            "theme": (self.theme_mode, one_of(*theme.MODES)),
+            "always_on_top": (self.always_on_top, flag),
+            "opacity": (self.opacity, lambda v: type(v) is int and MIN_OPACITY <= v <= 100),
+            "sounds": (self.sounds, flag),
         }
 
     def _apply_settings(self, saved):
@@ -198,11 +224,36 @@ class App:
             if key in saved and usable(saved[key]):
                 var.set(saved[key])
 
+    def _restore_position(self, saved):
+        """Reopen where the window was last, if that spot is still on a screen."""
+        x, y = saved.get("window_x"), saved.get("window_y")
+        if type(x) is int and type(y) is int and on_screen(x + 40, y + 15):  # a point in the title bar
+            self.window_pos = (x, y)
+            self.root.geometry(f"+{x}+{y}")
+
+    def _follow_look(self):
+        """Apply theme, always-on-top and opacity now, and again whenever they change."""
+        actions = (
+            (self.theme_mode, lambda: theme.apply(self.root, self.theme_mode.get())),
+            (self.always_on_top, lambda: self.root.attributes("-topmost", self.always_on_top.get())),
+            (self.opacity, lambda: self.root.attributes("-alpha", self.opacity.get() / 100)),
+        )
+        for var, action in actions:
+            action()
+            var.trace_add("write", lambda *_, action=action: action())
+
     def _save_settings(self):
         data = {key: var.get() for key, (var, _) in self._setting_vars().items()}
         data["hotkey"] = self.hotkeys.hotkey
         data["recording"] = dump_steps(self.steps)
         data["playback_loop"] = self.playback_loop
+        # Minimized or hidden windows report bogus positions; keep the last real one.
+        if self.root.state() == "normal":
+            match = re.search(r"\+(-?\d+)\+(-?\d+)$", self.root.geometry())
+            if match:
+                self.window_pos = (int(match[1]), int(match[2]))
+        if self.window_pos is not None:
+            data["window_x"], data["window_y"] = self.window_pos
         try:
             settings.save(data, self.settings_path)
         except OSError:
@@ -283,8 +334,8 @@ class App:
         self.tip = tk.Toplevel(self.root)
         self.tip.overrideredirect(True)
         self.tip.attributes("-topmost", True)
-        self.tip_label = tk.Label(self.tip, background="#ffffe1", relief="solid", borderwidth=1,
-                                  padx=6, pady=3, justify="left")
+        self.tip_label = tk.Label(self.tip, background=theme.color("tip_bg"), foreground=theme.color("tip_fg"),
+                                  relief="solid", borderwidth=1, padx=6, pady=3, justify="left")
         self.tip_label.pack()
         self._follow_cursor()
 
@@ -342,7 +393,25 @@ class App:
         self.playback_loop = loop
         self._save_settings()
 
+    def open_personalize(self):
+        if self.personalize is not None:
+            return
+        self.personalize = PersonalizeDialog(
+            self.root,
+            {"theme": self.theme_mode, "always_on_top": self.always_on_top,
+             "opacity": self.opacity, "sounds": self.sounds},
+            test_sound=lambda: sounds.play(started=True),
+            on_close=self._personalize_closed,
+        )
+
+    def _personalize_closed(self, saved):
+        self.personalize = None
+        if saved:
+            self._save_settings()
+
     def close(self):
+        if self.personalize is not None:
+            self.personalize.cancel()
         if self.recorder_window is not None:
             self.recorder_window.close()
         if self.picker is not None:
@@ -382,23 +451,33 @@ class App:
                 self.toggle()
         if self.recorder_window is not None:
             self.recorder_window.refresh()
+        self.polls += 1
+        if (self.polls % SYSTEM_THEME_POLLS == 0 and self.theme_mode.get() == "system"
+                and theme.resolve("system") != theme.current):
+            theme.apply(self.root, "system")  # Windows switched light/dark
         self._refresh()
         self._poll_job = self.root.after(POLL_MS, self._poll)
 
     def _refresh(self):
         running = self.engine.running
+        if running != self.was_running:
+            # Every start and stop passes through here: buttons, hotkey, Esc,
+            # fail-safe, repeat finished, playback.
+            self.was_running = running
+            if self.sounds.get():
+                sounds.play(started=running)
         self.start_button.state(["disabled" if running else "!disabled"])
         self.stop_button.state(["!disabled" if running else "disabled"])
         _set_enabled(self.pick_button, not running)
         _set_enabled(self.hotkey_button, not running)
         _set_enabled(self.recorder_button, not running)
         if self.error and not running:
-            self.status.config(text=self.error, foreground=ERROR_COLOR)
+            self.status.config(text=self.error, foreground=theme.color("error"))
             return
         n = self.engine.clicks
         clicks = f"{n:,} click" + ("" if n == 1 else "s")
         if running:
-            self.status.config(text=f"Running · {clicks}", foreground=RUNNING_COLOR)
+            self.status.config(text=f"Running · {clicks}", foreground=theme.color("running"))
         elif self.engine.stop_reason:
             self.status.config(text=f"Stopped ({self.engine.stop_reason}) · {clicks}", foreground="")
         else:

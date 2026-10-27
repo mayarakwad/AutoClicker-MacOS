@@ -2,10 +2,10 @@
 import tkinter as tk
 from tkinter import ttk
 
+import theme
 from hotkeys import DEFAULT_HOTKEY, combo_problem, display_name
 
 HINT = "Click Change, then press the new key or combination (e.g. F8 or Ctrl+Shift+S)."
-ERROR_COLOR = "#c42b1c"
 
 
 class HotkeyDialog:
@@ -45,7 +45,7 @@ class HotkeyDialog:
         ttk.Button(buttons, text="Cancel", command=self.cancel).grid(row=0, column=2)
         self._show(HINT)
 
-        win.update_idletasks()
+        theme.style_window(win)
         x = parent.winfo_rootx() + (parent.winfo_width() - win.winfo_width()) // 2
         win.geometry(f"+{x}+{parent.winfo_rooty() + 40}")
         win.grab_set()
@@ -53,7 +53,7 @@ class HotkeyDialog:
 
     def _show(self, message, error=False):
         self.key_label.config(text="Press a key or combination…" if self.recording else display_name(self.hotkey))
-        self.message.config(text=message, foreground=ERROR_COLOR if error else "")
+        self.message.config(text=message, foreground=theme.color("error") if error else "")
 
     def start_recording(self):
         self.recording = True

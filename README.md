@@ -3,7 +3,7 @@
 A lightweight Windows auto clicker modeled on OP Auto Clicker.
 Python 3.12, tkinter for the window, pynput for mouse control and global hotkeys.
 
-**Progress:** all 5 phases built (features plus `build.bat` packaging).
+**Progress:** all 5 phases built (features plus `build.bat` packaging), plus personalization.
 
 ## Build the .exe
 
@@ -50,9 +50,15 @@ Use `python` instead of `pythonw` to keep a console window open for error messag
   - **Playback:** choose **Once** or **Loop until stopped**, then press **Play** or F6. The step being played is highlighted. F6, Esc or the top-left corner stops it. Like Pick location, the cursor jumps to each point and straight back.
   - While this window is open, F6 controls playback instead of the normal clicker.
   - The last recording is saved with your settings.
+- **Personalize:** changes preview as you make them. **OK** keeps them, **Cancel** undoes them, and **Defaults** resets this dialog's options.
+  - **Theme:** Same as Windows (follows Windows' light/dark app mode, even while AutoClicker is open), Light, or Dark. Dark covers every window, drop-down lists and title bars.
+  - **Always on top:** keeps the main window above other apps.
+  - **Opacity:** makes the main window see-through, from 40% to 100%.
+  - **Sounds:** a rising beep when clicking starts and a falling one when it stops, whatever stopped it. **Test** plays it.
+  - **Window position:** the window always reopens where you left it, as long as that spot is still on a screen.
 - **Fail-safe:** press **Esc**, or move the mouse into the top-left corner of the main screen, and clicking stops immediately.
 - The status line shows Running/Stopped, the click count, and why clicking stopped.
-- **Saved settings:** all fields, the hotkey and the last recording are saved to `%APPDATA%\AutoClicker\settings.json` and restored on the next launch. Saving happens when you press Start, change the hotkey, close the Record & Playback window, or close the app. Delete that file to go back to defaults. Missing or invalid values fall back to defaults.
+- **Saved settings:** all fields, the hotkey, the last recording, personalization and the window position are saved to `%APPDATA%\AutoClicker\settings.json` and restored on the next launch. Saving happens when you press Start, change the hotkey, press OK in Personalize, close the Record & Playback window, or close the app. Delete that file to go back to defaults. Missing or invalid values fall back to defaults.
 
 Test stopping (F6, Esc, the corner) with a slow interval before trying very short ones.
 
@@ -77,6 +83,9 @@ The tests use a fake mouse and send no real input.
 | `hotkeys.py` | Global start/stop hotkey and Esc listener (pynput), key names and combos. |
 | `hotkey_dialog.py` | Hotkey setting dialog. |
 | `settings.py` | Reads and writes the settings JSON file. |
+| `personalize_dialog.py` | Personalize dialog. |
+| `theme.py` | Light/dark styling for every window, including title bars. |
+| `sounds.py` | Start/stop beeps. |
 | `tests/` | Unit tests. |
 | `build.bat` | Builds `dist\AutoClicker.exe`. |
 | `make_shortcut.bat` | Creates a Desktop shortcut that runs the app from source (for PCs with Smart App Control on). |

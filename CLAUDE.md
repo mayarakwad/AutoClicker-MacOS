@@ -13,6 +13,7 @@ Built in phases; the user tests each phase before the next one starts and says "
 3. Hotkey setting dialog; settings saved as JSON in `%APPDATA%` and restored on launch (done)
 4. Record & Playback: record clicks with positions and delays, play once or loop (done)
 5. `build.bat` → single `dist\AutoClicker.exe` via PyInstaller `--onefile --windowed` (built; see Packaging)
+6. Personalize dialog: theme (system/light/dark), always on top, opacity, start/stop sounds; window position remembered (built)
 
 Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 1 ms); the status line shows Running/Stopped and the click count.
 
@@ -82,6 +83,21 @@ Settings are handled as follows:
 - To add a setting backed by a Tk variable, add it to `_setting_vars`.
 - The recording is not a Tk variable. It lives in `App.steps` / `App.playback_loop` and is stored as `"recording"` (via `recorder.dump_steps` / `load_steps`, which is all-or-nothing: any bad item gives `[]`) and `"playback_loop"`.
 - `App(root, settings_path=...)` lets tests use a temp file. Tests must never write the real `%APPDATA%` file.
+
+Personalization:
+- `theme.apply(root, mode)` restyles every open window.
+  - Light is the native `vista` theme. Dark is `clam` plus our colors.
+  - It also recolors combobox drop-down lists (plain Tk Listboxes that ttk styles don't reach) and sets dark title bars (`DWMWA_USE_IMMERSIVE_DARK_MODE`).
+- Every new `Toplevel` must call `theme.style_window(win)`, and status colors must come from `theme.color(...)`, never hard-coded hex, so they stay readable in dark mode.
+- Dark checkboxes and the slider handle are image elements drawn by `_raster` and created once per run (ttk elements can't be redefined).
+  - clam's own checkbox shows ✕ marks.
+  - clam's slider shares its `background` with the track.
+- `"system"` mode is re-checked every `SYSTEM_THEME_POLLS` polls (about 2 s) in `_poll`.
+- `theme_mode`, `always_on_top`, `opacity` and `sounds` are App Tk variables in `_setting_vars`. `_follow_look` applies them and traces changes.
+  - `PersonalizeDialog` edits those variables directly, so changes preview live. Cancel restores the values it saw on open.
+  - Opacity applies to the main window only.
+- `_refresh` detects running→stopped and stopped→running transitions, so every start and stop (any cause, including playback) can beep. `sounds.play` runs `winsound.Beep` on a thread.
+- The window position (`window_x`/`window_y`) is saved only while `root.state() == "normal"`, because minimized windows report -32000. It's restored only if a title-bar point is `on_screen`.
 
 The UI enables the offset, repeat and X/Y entries through `trace_add` on their option variables, not widget `command=`, so values set in code (e.g. restored settings) update the entries too. X/Y allow a leading minus (screens left of or above the main one) and are checked with `on_screen()`. Every other number field accepts digits only.
 

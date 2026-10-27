@@ -2,13 +2,10 @@
 import tkinter as tk
 from tkinter import ttk
 
+import theme
 from engine import PlaybackConfig
 from mouse_io import on_screen
 from recorder import ClickRecorder
-
-RUNNING_COLOR = "#107c10"
-RECORDING_COLOR = "#c42b1c"
-ERROR_COLOR = "#c42b1c"
 
 
 def _set_enabled(widget, enabled):
@@ -81,7 +78,7 @@ class RecorderWindow:
             self._insert(step)
         self.refresh()
 
-        win.update_idletasks()
+        theme.style_window(win)
         x = parent.winfo_rootx() + (parent.winfo_width() - win.winfo_width()) // 2
         win.geometry(f"+{x}+{parent.winfo_rooty() + 20}")
         win.grab_set()
@@ -175,15 +172,15 @@ class RecorderWindow:
 
         n = len(self.steps)
         if self.recording:
-            text, color = f"Recording · {_plural(n, 'click')} · {self.hotkey} or Esc to stop", RECORDING_COLOR
+            text, color = f"Recording · {_plural(n, 'click')} · {self.hotkey} or Esc to stop", theme.color("recording")
         elif playing:
             done = self.engine.clicks
             text = f"Playing step {done % n + 1} of {n}"
             if self.loop.get():
                 text += f" · loop {done // n + 1}"
-            color = RUNNING_COLOR
+            color = theme.color("running")
         elif self.error:
-            text, color = self.error, ERROR_COLOR
+            text, color = self.error, theme.color("error")
         elif self.played and self.engine.stop_reason:
             text, color = f"Stopped ({self.engine.stop_reason}) · {_plural(self.engine.clicks, 'click')} played", ""
         elif n:
