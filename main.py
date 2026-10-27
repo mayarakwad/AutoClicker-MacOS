@@ -1,8 +1,13 @@
 """AutoClicker entry point."""
 import ctypes
+import sys
 import tkinter as tk
+from pathlib import Path
 
 from ui import App
+
+# Bundled files live next to this script, or in PyInstaller's unpack folder.
+ASSETS = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "assets"
 
 
 def enable_dpi_awareness():
@@ -22,6 +27,10 @@ def enable_dpi_awareness():
 def main():
     enable_dpi_awareness()
     root = tk.Tk()
+    try:
+        root.iconbitmap(default=ASSETS / "app.ico")  # default= covers dialogs too
+    except tk.TclError:
+        pass
     App(root)  # loads settings from %APPDATA%\AutoClicker\settings.json
     root.mainloop()
 

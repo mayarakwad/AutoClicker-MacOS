@@ -12,7 +12,7 @@ Built in phases; the user tests each phase before the next one starts and says "
 2. Random offset ± N ms (default 40), double click, Pick location (click anywhere to capture X/Y), repeat N times vs until stopped (done)
 3. Hotkey setting dialog; settings saved as JSON in `%APPDATA%` and restored on launch (done)
 4. Record & Playback: record clicks with positions and delays, play once or loop (done)
-5. `build.bat` → single `dist\AutoClicker.exe` via PyInstaller `--onefile --windowed`
+5. `build.bat` → single `dist\AutoClicker.exe` via PyInstaller `--onefile --windowed` (built; see Packaging)
 
 Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 1 ms); the status line shows Running/Stopped and the click count.
 
@@ -25,7 +25,23 @@ Python and Git were installed mid-session and may not be on PATH yet. Use the ve
 .venv\Scripts\python -m unittest                  # all tests
 .venv\Scripts\python -m unittest tests.test_engine.ClickEngineTest.test_failsafe_corner_stops_clicking
 .venv\Scripts\pip install -r requirements.txt     # deps (pinned)
+cmd /c C:\Projects\AutoClicker\build.bat          # -> dist\AutoClicker.exe (from PowerShell, pass the full path)
+.venv\Scripts\python assets\make_icon.py          # regenerate assets\app.ico
+cmd /c C:\Projects\AutoClicker\make_shortcut.bat  # Desktop shortcut: venv pythonw.exe + main.py + app icon
 ```
+
+## Packaging
+
+- PyInstaller's contrib hook (`hook-pynput`) already collects pynput's backend submodules, so no `--hidden-import` is needed.
+- `assets\app.ico` is bundled with `--add-data` and found at runtime through `main.ASSETS`, which uses `sys._MEIPASS` when frozen. `root.iconbitmap(default=...)` applies the icon to dialogs too.
+- `assets\make_icon.py` draws the icon in pure Python (no Pillow), using all-BMP ICO entries so both Tk and Windows read every size.
+- **Smart App Control is ON on this dev PC.** It blocks the unsigned exe from running (WinError 4551; Code Integrity events 3077/3033).
+  - Don't try to bypass it, and don't change security settings.
+  - The exe has been built and its contents checked with `python -m PyInstaller.utils.cliutils.archive_viewer -l -r`, but it has not been run here.
+  - `.venv\Scripts\pythonw.exe` is PSF-signed and allowed, so running from source works.
+  - The user runs the app through the Desktop shortcut from `make_shortcut.bat` (OneDrive Desktop).
+  - The venv's `pythonw.exe` is a launcher that starts the base install's `pythonw.exe`, which is also PSF-signed. So the app's window belongs to the base `pythonw.exe` process, not the venv one.
+- To test a frozen build end to end, launch it with `APPDATA` pointed at a temp folder, so it never touches the user's real settings.
 
 ## Architecture
 

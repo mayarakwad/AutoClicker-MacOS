@@ -3,7 +3,22 @@
 A lightweight Windows auto clicker modeled on OP Auto Clicker.
 Python 3.12, tkinter for the window, pynput for mouse control and global hotkeys.
 
-**Progress:** Phase 4 of 5 (all features done; packaging as an .exe comes next).
+**Progress:** all 5 phases built (features plus `build.bat` packaging).
+
+## Build the .exe
+
+```
+build.bat
+```
+
+This creates the virtual environment if needed, installs `requirements.txt`, and builds `dist\AutoClicker.exe`, a single file of about 11 MB with no console window, using PyInstaller `--onefile --windowed`. The exe has the app icon and version details (Properties > Details). Settings still live in `%APPDATA%\AutoClicker\settings.json`.
+
+The exe isn't code-signed, which matters in two cases:
+
+- **SmartScreen:** on another PC, a downloaded copy shows a SmartScreen warning the first time. Click **More info**, then **Run anyway**.
+- **Smart App Control:** Windows 11's Smart App Control blocks unsigned programs outright, with no "Run anyway". The error is "An Application Control policy has blocked this file". On a PC with it turned on, run `make_shortcut.bat` instead. It puts an **AutoClicker** shortcut on the Desktop that runs the app from source through the venv's `pythonw.exe`, which is signed by the Python Software Foundation and so is allowed. It has the same icon and no console window. The other option is to sign the exe with a certificate from a trusted certificate authority.
+
+To change the icon, edit and run `.venv\Scripts\python assets\make_icon.py`, then rebuild.
 
 ## Run from source
 
@@ -63,3 +78,7 @@ The tests use a fake mouse and send no real input.
 | `hotkey_dialog.py` | Hotkey setting dialog. |
 | `settings.py` | Reads and writes the settings JSON file. |
 | `tests/` | Unit tests. |
+| `build.bat` | Builds `dist\AutoClicker.exe`. |
+| `make_shortcut.bat` | Creates a Desktop shortcut that runs the app from source (for PCs with Smart App Control on). |
+| `version_info.txt` | Version details embedded in the exe. |
+| `assets/` | `app.ico` and the script that draws it. |
