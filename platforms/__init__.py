@@ -9,13 +9,13 @@ if sys.platform == "darwin":
     from platforms.macos import (
         EXAMPLE_COMBO, KEY_NAMES, MODIFIER_LABELS, NATIVE_DARK, NATIVE_THEME, OS_NAME, TYPING_MODIFIERS,
         KeySource, Mouse, MouseListener, PointPicker, is_own_window, on_screen, permission_problem,
-        play_sound, prepare_process, request_permissions, set_app_icon, set_window_dark, settings_folder,
-        system_uses_dark,
+        play_sound, prepare_process, request_permissions, set_app_icon, set_clicking, set_window_dark,
+        settings_folder, system_uses_dark,
     )
 else:
     from platforms.windows import (
         EXAMPLE_COMBO, KEY_NAMES, MODIFIER_LABELS, NATIVE_DARK, NATIVE_THEME, OS_NAME, TYPING_MODIFIERS,
         KeySource, Mouse, MouseListener, PointPicker, is_own_window, on_screen, permission_problem,
-        play_sound, prepare_process, request_permissions, set_app_icon, set_window_dark, settings_folder,
-        system_uses_dark,
+        play_sound, prepare_process, request_permissions, set_app_icon, set_clicking, set_window_dark,
+        settings_folder, system_uses_dark,
     )

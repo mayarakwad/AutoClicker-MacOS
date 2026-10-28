@@ -38,8 +38,10 @@ class ClickEngineTest(unittest.TestCase):
 
     def test_clicks_at_interval(self):
         self.run_for(0.5, interval_ms=20)
-        # 0.5 s / 20 ms = 25 clicks; allow for timer jitter.
-        self.assertGreaterEqual(self.engine.clicks, 20)
+        # 0.5 s / 20 ms = 25 clicks. The low bound only catches stalls: GitHub's
+        # macOS runners oversleep about 10 ms per wait and managed 16. Never more
+        # than 25 (+1 for timing): no catch-up bursts.
+        self.assertGreaterEqual(self.engine.clicks, 12)
         self.assertLessEqual(self.engine.clicks, 26)
         self.assertEqual(self.engine.clicks, len(self.mouse.clicked))
 

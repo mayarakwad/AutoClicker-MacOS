@@ -130,6 +130,31 @@ class FakeHIServices(types.ModuleType):
         return self.trusted
 
 
+class FakeFoundation(types.ModuleType):
+    NSActivityUserInitiatedAllowingIdleSystemSleep = 15728639
+    NSActivityLatencyCritical = 1095216660480
+
+    def __init__(self):
+        super().__init__("Foundation")
+        self.activities = []  # (event, options or token)
+        foundation = self
+
+        class ProcessInfo:
+            def beginActivityWithOptions_reason_(self, options, reason):
+                foundation.activities.append(("begin", options))
+                return "token"
+
+            def endActivity_(self, token):
+                foundation.activities.append(("end", token))
+
+        class NSProcessInfo:
+            @staticmethod
+            def processInfo():
+                return ProcessInfo()
+
+        self.NSProcessInfo = NSProcessInfo
+
+
 def wait_until(condition, timeout=1.0):
     deadline = time.perf_counter() + timeout
     while not condition() and time.perf_counter() < deadline:
@@ -142,8 +167,10 @@ class MacBackendTest(unittest.TestCase):
         import platforms
         self.q = FakeQuartz()
         self.hi = FakeHIServices()
+        self.foundation = FakeFoundation()
         real = vars(platforms).get("macos")  # the real backend, on a Mac
-        with mock.patch.dict(sys.modules, {"Quartz": self.q, "HIServices": self.hi}):
+        fakes = {"Quartz": self.q, "HIServices": self.hi, "Foundation": self.foundation}
+        with mock.patch.dict(sys.modules, fakes):
             sys.modules.pop("platforms.macos", None)
             self.mac = importlib.import_module("platforms.macos")
         if real is None:
@@ -291,6 +318,15 @@ class MacBackendTest(unittest.TestCase):
         self.mac.request_permissions()
         self.assertEqual(self.hi.prompts, [{"AXTrustedCheckOptionPrompt": True}])
         self.assertEqual(self.q.requests, ["listen"])
+
+    def test_app_nap_is_held_off_only_while_clicking(self):
+        f = self.foundation
+        self.mac.set_clicking(True)
+        self.mac.set_clicking(True)  # already held: no second activity
+        self.mac.set_clicking(False)
+        self.mac.set_clicking(False)  # already ended: nothing to end
+        options = f.NSActivityUserInitiatedAllowingIdleSystemSleep | f.NSActivityLatencyCritical
+        self.assertEqual(f.activities, [("begin", options), ("end", "token")])
 
     # Files, look, sounds
     def test_settings_folder(self):

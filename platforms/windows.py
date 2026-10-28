@@ -42,6 +42,10 @@ def prepare_process():
             pass
 
 
+def set_clicking(active):
+    pass  # Windows doesn't throttle the click timer: time.sleep uses a high-resolution timer
+
+
 def set_app_icon(root, assets):
     try:
         root.iconbitmap(default=assets / "app.ico")  # default= covers dialogs too

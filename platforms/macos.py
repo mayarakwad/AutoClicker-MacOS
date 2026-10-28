@@ -14,6 +14,7 @@ import threading
 import tkinter as tk
 from pathlib import Path
 
+import Foundation
 import HIServices
 import Quartz
 
@@ -31,6 +32,26 @@ EXAMPLE_COMBO = "win+shift+s"
 
 def prepare_process():
     pass  # coordinates are already in points on every display
+
+
+_activity = None  # NSProcessInfo token; App Nap stays off while it's held
+
+
+def set_clicking(active):
+    """While clicking, keep App Nap from delaying the click timer.
+
+    App Nap throttles timers of apps whose windows are hidden or covered,
+    which is exactly when an auto clicker runs (you're working in another app).
+    """
+    global _activity
+    info = Foundation.NSProcessInfo.processInfo()
+    if active and _activity is None:
+        _activity = info.beginActivityWithOptions_reason_(
+            Foundation.NSActivityUserInitiatedAllowingIdleSystemSleep | Foundation.NSActivityLatencyCritical,
+            "Clicking on a timer")
+    elif not active and _activity is not None:
+        info.endActivity_(_activity)
+        _activity = None
 
 
 def set_app_icon(root, assets):

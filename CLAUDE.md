@@ -61,7 +61,7 @@ On a Mac: `.venv/bin/python main.py` to run, `bash build_mac.sh` to build `dist/
 ## Architecture
 
 OS layer: everything OS-specific lives in `platforms/windows.py` and `platforms/macos.py`, which define the same names. `platforms/__init__.py` imports one of them by `sys.platform`, and the rest of the app imports only from `platforms`.
-- The names are: `Mouse`, `PointPicker`, `MouseListener`, `KeySource`, `on_screen`, `is_own_window`, `play_sound`, `settings_folder`, `system_uses_dark`, `set_window_dark`, `permission_problem`, `request_permissions`, `prepare_process`, `set_app_icon`, plus the constants (`KEY_NAMES`, `MODIFIER_LABELS`, `TYPING_MODIFIERS`, `EXAMPLE_COMBO`, `OS_NAME`, `NATIVE_THEME`, `NATIVE_DARK`).
+- The names are: `Mouse`, `PointPicker`, `MouseListener`, `KeySource`, `on_screen`, `is_own_window`, `play_sound`, `settings_folder`, `system_uses_dark`, `set_window_dark`, `permission_problem`, `request_permissions`, `prepare_process`, `set_app_icon`, `set_clicking`, plus the constants (`KEY_NAMES`, `MODIFIER_LABELS`, `TYPING_MODIFIERS`, `EXAMPLE_COMBO`, `OS_NAME`, `NATIVE_THEME`, `NATIVE_DARK`).
 - Add a new OS-specific function to both backends and to the import lists in `__init__.py`. `tests/test_macos_backend.py` checks the Mac module defines everything the package imports.
 - Buttons are passed around as names (`"left"`, `"right"`, `"middle"`). Keys are OS-independent names (`"f6"`, `"a"`, `"page_up"`); `"win"` is the Windows key on Windows and Command on macOS.
 
@@ -126,6 +126,9 @@ The UI enables the offset, repeat and X/Y entries through `trace_add` on their o
 Engine timing details that are easy to break:
 - Clicks are scheduled against `perf_counter` deadlines (no drift, no catch-up bursts).
 - Waiting uses `time.sleep` in slices of at most 50 ms, so stop and the fail-safe react quickly even with long intervals. `time.sleep` uses a high-resolution timer on Python 3.11+ on Windows. Don't replace it with `Event.wait`, which falls back to about 15.6 ms granularity, especially while the window is minimized.
+- On macOS, App Nap throttles the timers of apps whose windows are hidden, which is exactly when an auto clicker runs.
+  - `_refresh` calls `platforms.set_clicking(running)` on every start and stop. On macOS this holds an `NSProcessInfo` latency-critical activity while clicking; on Windows it does nothing.
+  - GitHub's macOS runners still oversleep about 10 ms per wait (16 instead of 25 clicks in 0.5 s at 20 ms), so `test_clicks_at_interval` only checks for stalls and bursts.
 
 `platforms.prepare_process()` must run before the Tk root is created. On Windows it turns on DPI awareness: pynput doesn't, and without it cursor coordinates are scaled wrongly on 125%/150% displays (this matters for Pick location and recording). On macOS it does nothing, because Quartz and Tk both use points with a top-left origin.
 

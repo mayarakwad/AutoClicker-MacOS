@@ -477,6 +477,7 @@ class App:
             # Every start and stop passes through here: buttons, hotkey, Esc,
             # fail-safe, repeat finished, playback.
             self.was_running = running
+            platforms.set_clicking(running)
             if self.sounds.get():
                 platforms.play_sound(started=running)
         self.start_button.state(["disabled" if running else "!disabled"])
