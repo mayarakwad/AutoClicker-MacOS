@@ -76,6 +76,16 @@ The Mac version shares all of the app's code except `platforms/macos.py`, which 
 
 **Not yet tested on a real Mac.** On GitHub's Macs the tests pass, the app builds, and it starts without errors. Real clicking, hotkeys and permissions can only be tried by a person on a Mac, so expect a round of fixes after the first real test.
 
+### Install with one command
+
+On an Apple Silicon Mac (M1 or later), paste this into Terminal. It downloads the latest release, unpacks it into `~/Applications` and opens it:
+
+```
+mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.com/mayarakwad/AutoClicker/releases/latest/download/AutoClicker-mac.zip && ditto -x -k /tmp/AutoClicker-mac.zip ~/Applications && open ~/Applications/AutoClicker.app
+```
+
+Then allow it under Accessibility and Input Monitoring (see [Permissions](#permissions)). Releases are published by the GitHub build when a version tag is pushed: `git tag v1.0.1` then `git push origin v1.0.1`.
+
 ### Run from source
 
 Install Python 3.12 from [python.org](https://www.python.org/downloads/macos/). Apple's built-in `python3` comes with an old Tk without dark-mode support. Then, in Terminal:

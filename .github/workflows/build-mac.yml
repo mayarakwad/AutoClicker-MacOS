@@ -1,5 +1,7 @@
 # Builds AutoClicker.app on a GitHub-hosted Mac, runs the tests there, and
 # checks the built app starts. Download the app from the run's Artifacts.
+# Pushing a version tag (git tag v1.0.1 && git push origin v1.0.1) also
+# publishes the app as a public GitHub Release.
 # (Real clicking and hotkeys can't be tested here: macOS only allows them
 # after a person grants permission in System Settings.)
 name: macOS build
@@ -15,6 +17,8 @@ permissions:
 jobs:
   build:
     runs-on: macos-latest
+    permissions:
+      contents: write  # only used by the last step, to publish a release for v* tags
     steps:
       - uses: actions/checkout@v4
 
@@ -66,3 +70,22 @@ jobs:
             exit 1
           fi
           kill "$pid"
+
+      - name: Publish release (v* tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > release-notes.md <<'EOF'
+          AutoClicker for macOS, Apple Silicon (M1 or later). Not yet tested by a person on a real Mac; please report what happens.
+
+          Install and open it from Terminal:
+
+          ```
+          mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.com/mayarakwad/AutoClicker/releases/latest/download/AutoClicker-mac.zip && ditto -x -k /tmp/AutoClicker-mac.zip ~/Applications && open ~/Applications/AutoClicker.app
+          ```
+
+          Then allow AutoClicker under System Settings > Privacy & Security > Accessibility and Input Monitoring.
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/AutoClicker-mac.zip \
+            --title "AutoClicker $GITHUB_REF_NAME" --notes-file release-notes.md

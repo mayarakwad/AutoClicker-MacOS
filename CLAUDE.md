@@ -23,6 +23,9 @@ Built in phases; the user tests each phase before the next one starts and says "
    - Clicking, hotkeys and permissions can't be tested there, because nobody can grant TCC permissions on GitHub's machines.
    - Logs need sign-in, but `.github/annotate_test_failures.py` posts failing tests as annotations, readable without sign-in via `api.github.com/repos/mayarakwad/AutoClicker/check-runs/<job id>/annotations`.
    - Commit messages: on Windows PowerShell 5.1, pass them with `git commit -F <file>`. Double quotes inside `-m` get mangled.
+   - Releases: pushing a `v*` tag makes the workflow's last step run `gh release create` with `dist/AutoClicker-mac.zip`. The job has `contents: write` for that.
+   - The one-command install (README) downloads `releases/latest/download/AutoClicker-mac.zip`. curl doesn't set the quarantine flag, so Gatekeeper's "Open Anyway" isn't needed.
+   - The app is arm64 only, so it won't run on Intel Macs.
 
 Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 1 ms); the status line shows Running/Stopped and the click count.
 
