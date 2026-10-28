@@ -31,7 +31,15 @@ jobs:
           .venv/bin/python -m pip install -r requirements.txt
 
       - name: Unit tests
-        run: .venv/bin/python -m unittest -v
+        run: |
+          set +e
+          .venv/bin/python -m unittest -v 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            # As annotations, failures are readable without signing in, unlike the log.
+            .venv/bin/python .github/annotate_test_failures.py test-output.txt
+          fi
+          exit "$status"
 
       - name: Build AutoClicker.app
         run: bash build_mac.sh
@@ -46,12 +54,15 @@ jobs:
       - name: Check the built app starts
         run: |
           export HOME="$(mktemp -d)"  # fresh settings; nothing written to the runner's home
-          ./dist/AutoClicker.app/Contents/MacOS/AutoClicker &
+          ./dist/AutoClicker.app/Contents/MacOS/AutoClicker > app-output.txt 2>&1 &
           pid=$!
           sleep 10
           if ! kill -0 "$pid" 2>/dev/null; then
-            echo "AutoClicker exited during startup"
-            wait "$pid"
+            code=0
+            wait "$pid" || code=$?
+            cat app-output.txt
+            message=$(tail -n 40 app-output.txt | .venv/bin/python -c 'import sys; print(sys.stdin.read().replace("%", "%25").replace("\n", "%0A"))')
+            echo "::error title=AutoClicker exited during startup (code $code)::$message"
             exit 1
           fi
           kill "$pid"
