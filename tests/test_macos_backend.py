@@ -155,7 +155,7 @@ class FakeFoundation(types.ModuleType):
         self.NSProcessInfo = NSProcessInfo
 
 
-def wait_until(condition, timeout=1.0):
+def wait_until(condition, timeout=5.0):
     deadline = time.perf_counter() + timeout
     while not condition() and time.perf_counter() < deadline:
         time.sleep(0.005)

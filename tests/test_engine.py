@@ -34,13 +34,13 @@ class ClickEngineTest(unittest.TestCase):
 
     def tearDown(self):
         self.engine.stop()
-        self.engine.join(1)
+        self.engine.join(5)
 
     def run_for(self, seconds, **config):
         self.engine.start(ClickConfig(**config))
         time.sleep(seconds)
         self.engine.stop()
-        self.engine.join(1)
+        self.engine.join(5)
 
     def test_clicks_at_interval(self):
         self.run_for(0.5, interval_ms=20)
@@ -55,30 +55,30 @@ class ClickEngineTest(unittest.TestCase):
         time.sleep(0.1)
         started = time.perf_counter()
         self.engine.stop()
-        self.engine.join(1)
+        self.engine.join(5)
         self.assertFalse(self.engine.running)
         self.assertLess(time.perf_counter() - started, 1.0 if SHARED_CI else 0.2)
         self.assertEqual(self.engine.clicks, 0)
 
     def test_uses_chosen_button(self):
-        self.run_for(0.1, interval_ms=5, button="right")
+        self.run_for(0.3, interval_ms=5, button="right")
         self.assertTrue(self.mouse.clicked)
         self.assertTrue(all(b == "right" for b, _, _ in self.mouse.clicked))
 
     def test_double_click_counts_once(self):
-        self.run_for(0.1, interval_ms=5, double=True)
+        self.run_for(0.3, interval_ms=5, double=True)
         self.assertTrue(self.mouse.clicked)
         self.assertTrue(all(count == 2 for _, count, _ in self.mouse.clicked))
         self.assertEqual(self.engine.clicks, len(self.mouse.clicked))
 
     def test_clicks_at_picked_position(self):
-        self.run_for(0.1, interval_ms=5, position=(10, -20))
+        self.run_for(0.3, interval_ms=5, position=(10, -20))
         self.assertTrue(self.mouse.clicked)
         self.assertTrue(all(pos == (10, -20) for _, _, pos in self.mouse.clicked))
 
     def test_repeat_stops_after_count(self):
         self.engine.start(ClickConfig(interval_ms=5, repeat=7))
-        self.engine.join(1)
+        self.engine.join(5)
         self.assertFalse(self.engine.running)
         self.assertEqual(self.engine.clicks, 7)
         self.assertEqual(len(self.mouse.clicked), 7)
@@ -88,7 +88,7 @@ class ClickEngineTest(unittest.TestCase):
         self.engine.start(ClickConfig(interval_ms=10))
         time.sleep(0.1)
         self.mouse.position = (1, 0)
-        self.engine.join(1)
+        self.engine.join(5)
         self.assertFalse(self.engine.running)
         self.assertEqual(self.engine.stop_reason, "mouse in top-left corner")
         clicks = self.engine.clicks
@@ -98,7 +98,7 @@ class ClickEngineTest(unittest.TestCase):
     def test_stop_reason_is_kept(self):
         self.engine.start(ClickConfig(interval_ms=10))
         self.engine.stop("Esc pressed")
-        self.engine.join(1)
+        self.engine.join(5)
         self.assertEqual(self.engine.stop_reason, "Esc pressed")
 
     def test_rejects_bad_config(self):

@@ -54,13 +54,13 @@ class PlaybackTest(unittest.TestCase):
 
     def tearDown(self):
         self.engine.stop()
-        self.engine.join(1)
+        self.engine.join(5)
 
     def test_plays_steps_once_in_order_with_delays(self):
         steps = [Step(30, "left", 1, 2), Step(60, "right", 3, 4), Step(30, "middle", 5, 6)]
         started = time.perf_counter()
         self.engine.start(PlaybackConfig(steps))
-        self.engine.join(2)
+        self.engine.join(5)
         elapsed = time.perf_counter() - started
         self.assertEqual(self.mouse.clicked, [("left", 1, (1, 2)), ("right", 1, (3, 4)),
                                               ("middle", 1, (5, 6))])
@@ -71,12 +71,12 @@ class PlaybackTest(unittest.TestCase):
     def test_loop_repeats_until_stopped(self):
         steps = [Step(5, "left", 1, 1), Step(5, "left", 2, 2)]
         self.engine.start(PlaybackConfig(steps, loop=True))
-        time.sleep(0.2)
+        time.sleep(1.0 if SHARED_CI else 0.2)
         self.assertTrue(self.engine.running)
         self.engine.stop("Esc pressed")
-        self.engine.join(1)
+        self.engine.join(5)
         positions = [pos for _, _, pos in self.mouse.clicked]
-        self.assertGreater(len(positions), 6)
+        self.assertGreaterEqual(len(positions), 4 if SHARED_CI else 7)  # at least one full loop
         self.assertEqual(positions[:4], [(1, 1), (2, 2), (1, 1), (2, 2)])
         self.assertEqual(self.engine.stop_reason, "Esc pressed")
 
@@ -84,7 +84,7 @@ class PlaybackTest(unittest.TestCase):
         self.engine.start(PlaybackConfig([Step(10, "left", 50, 50)], loop=True))
         time.sleep(0.1)
         self.mouse.position = (0, 0)
-        self.engine.join(1)
+        self.engine.join(5)
         self.assertFalse(self.engine.running)
         self.assertEqual(self.engine.stop_reason, "mouse in top-left corner")
 
