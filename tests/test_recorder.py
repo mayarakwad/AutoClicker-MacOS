@@ -6,7 +6,7 @@ import unittest
 
 from engine import ClickEngine, PlaybackConfig, Step
 from recorder import ClickRecorder, dump_steps, load_steps
-from tests.test_engine import FakeMouse
+from tests.test_engine import SHARED_CI, FakeMouse
 
 
 class ClickRecorderTest(unittest.TestCase):
@@ -66,7 +66,7 @@ class PlaybackTest(unittest.TestCase):
                                               ("middle", 1, (5, 6))])
         self.assertEqual(self.engine.stop_reason, "finished")
         self.assertGreaterEqual(elapsed, 0.115)
-        self.assertLess(elapsed, 0.2)
+        self.assertLess(elapsed, 2.0 if SHARED_CI else 0.2)
 
     def test_loop_repeats_until_stopped(self):
         steps = [Step(5, "left", 1, 1), Step(5, "left", 2, 2)]

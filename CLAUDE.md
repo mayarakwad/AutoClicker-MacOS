@@ -128,7 +128,7 @@ Engine timing details that are easy to break:
 - Waiting uses `time.sleep` in slices of at most 50 ms, so stop and the fail-safe react quickly even with long intervals. `time.sleep` uses a high-resolution timer on Python 3.11+ on Windows. Don't replace it with `Event.wait`, which falls back to about 15.6 ms granularity, especially while the window is minimized.
 - On macOS, App Nap throttles the timers of apps whose windows are hidden, which is exactly when an auto clicker runs.
   - `_refresh` calls `platforms.set_clicking(running)` on every start and stop. On macOS this holds an `NSProcessInfo` latency-critical activity while clicking; on Windows it does nothing.
-  - GitHub's macOS runners still oversleep about 10 ms per wait (16 instead of 25 clicks in 0.5 s at 20 ms), so `test_clicks_at_interval` only checks for stalls and bursts.
+  - GitHub's shared macOS runners oversleep by 10-80 ms per wait (16 instead of 25 clicks in 0.5 s at 20 ms; 0.37 s for a 0.12 s playback). With `CI=true`, the timing tests (`SHARED_CI` in `tests/test_engine.py`) only check for hangs and bursts; real machines get the precise limits.
 
 `platforms.prepare_process()` must run before the Tk root is created. On Windows it turns on DPI awareness: pynput doesn't, and without it cursor coordinates are scaled wrongly on 125%/150% displays (this matters for Pick location and recording). On macOS it does nothing, because Quartz and Tk both use points with a top-left origin.
 
