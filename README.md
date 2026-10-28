@@ -74,7 +74,7 @@ The tests use a fake mouse and send no real input. The macOS backend is also tes
 
 The Mac version shares all of the app's code except `platforms/macos.py`, which uses Quartz (through pyobjc) instead of pynput and Win32.
 
-**Not yet tested on a real Mac.** Its logic is tested against a fake Quartz, and GitHub Actions builds it and runs the tests on a Mac, but nobody has clicked with it yet. Expect a round of fixes after the first real test.
+**Not yet tested on a real Mac.** On GitHub's Macs the tests pass, the app builds, and it starts without errors. Real clicking, hotkeys and permissions can only be tried by a person on a Mac, so expect a round of fixes after the first real test.
 
 ### Run from source
 

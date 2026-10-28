@@ -19,6 +19,10 @@ Built in phases; the user tests each phase before the next one starts and says "
    - M2: `platforms/macos.py` (tested only against a fake Quartz).
    - M3: `build_mac.sh` plus the GitHub Actions build.
    - The user has no Mac. Expect the first real-Mac test to need fixes.
+   - GitHub repo: https://github.com/mayarakwad/AutoClicker (public). Its macOS build passes: tests (including the real Quartz checks), build, and a 10 s launch check.
+   - Clicking, hotkeys and permissions can't be tested there, because nobody can grant TCC permissions on GitHub's machines.
+   - Logs need sign-in, but `.github/annotate_test_failures.py` posts failing tests as annotations, readable without sign-in via `api.github.com/repos/mayarakwad/AutoClicker/check-runs/<job id>/annotations`.
+   - Commit messages: on Windows PowerShell 5.1, pass them with `git commit -F <file>`. Double quotes inside `-m` get mangled.
 
 Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 1 ms); the status line shows Running/Stopped and the click count.
 
