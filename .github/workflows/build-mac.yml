@@ -1,0 +1,57 @@
+# Builds AutoClicker.app on a GitHub-hosted Mac, runs the tests there, and
+# checks the built app starts. Download the app from the run's Artifacts.
+# (Real clicking and hotkeys can't be tested here: macOS only allows them
+# after a person grants permission in System Settings.)
+name: macOS build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Python has Tk
+        run: python -c "import tkinter; print('Tk', tkinter.TkVersion)"
+
+      - name: Install requirements
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Unit tests
+        run: .venv/bin/python -m unittest -v
+
+      - name: Build AutoClicker.app
+        run: bash build_mac.sh
+
+      - name: Upload the app
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoClicker-mac
+          path: dist/AutoClicker-mac.zip
+          if-no-files-found: error
+
+      - name: Check the built app starts
+        run: |
+          export HOME="$(mktemp -d)"  # fresh settings; nothing written to the runner's home
+          ./dist/AutoClicker.app/Contents/MacOS/AutoClicker &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "AutoClicker exited during startup"
+            wait "$pid"
+            exit 1
+          fi
+          kill "$pid"

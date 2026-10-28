@@ -1,5 +1,6 @@
-"""Settings file tests (temporary folder, never the real %APPDATA%)."""
+"""Settings file tests (temporary folder, never the real settings file)."""
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,10 +31,13 @@ class SettingsTest(unittest.TestCase):
             self.path.write_bytes(content)
             self.assertEqual(settings.load(self.path), {}, content)
 
-    def test_default_path_is_in_appdata(self):
+    def test_default_path(self):
         path = settings.default_path()
-        self.assertEqual(path.parent.parent, Path(os.environ["APPDATA"]))
         self.assertEqual((path.parent.name, path.name), ("AutoClicker", "settings.json"))
+        if sys.platform == "win32":
+            self.assertEqual(path.parent.parent, Path(os.environ["APPDATA"]))
+        elif sys.platform == "darwin":
+            self.assertEqual(path.parent.parent, Path.home() / "Library" / "Application Support")
 
 
 if __name__ == "__main__":

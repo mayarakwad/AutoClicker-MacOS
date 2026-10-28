@@ -4,20 +4,21 @@ import re
 import tkinter as tk
 from tkinter import ttk
 
+import platforms
 import settings
-import sounds
 import theme
 from engine import ClickConfig, ClickEngine
 from hotkey_dialog import HotkeyDialog
 from hotkeys import DEFAULT_HOTKEY, HotkeyListener, combo_problem, display_name
-from mouse_io import PointPicker, on_screen
+from platforms import PointPicker, on_screen
 from personalize_dialog import DEFAULTS as LOOK_DEFAULTS, MIN_OPACITY, PersonalizeDialog
 from recorder import dump_steps, load_steps
 from recorder_window import RecorderWindow
 
 # How often the window checks hotkey events and engine status.
 POLL_MS = 50
-# How often (in polls) a "Same as Windows" theme checks for a Windows change.
+# How often (in polls) a "Same as Windows/macOS" theme checks for an OS change,
+# and macOS re-checks its Accessibility/Input Monitoring permissions.
 SYSTEM_THEME_POLLS = 40
 # How often the pick tooltip follows the cursor.
 TIP_MS = 30
@@ -54,6 +55,7 @@ class App:
         self.dialog = None
         self.recorder_window = None
         self.personalize = None
+        self.notice = ""  # macOS only: missing Accessibility/Input Monitoring permission
         self.was_running = False
         self.polls = 0
         self.window_pos = None
@@ -80,6 +82,9 @@ class App:
         self._apply_settings(saved)
         self._restore_position(saved)
         self._follow_look()
+        self.notice = platforms.permission_problem() or ""
+        if self.notice:
+            platforms.request_permissions()
         self.hotkeys.start()
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._poll()
@@ -173,6 +178,8 @@ class App:
 
         self.status = ttk.Label(outer, anchor="w")
         self.status.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        outer.update_idletasks()  # wrap long messages instead of widening the window
+        self.status.config(wraplength=outer.winfo_reqwidth() - 20)
         # Traces (not widget commands) so entries also follow values set in code.
         for var in (self.use_offset, self.repeat_mode, self.position_mode):
             var.trace_add("write", lambda *_: self._sync_inputs())
@@ -304,6 +311,11 @@ class App:
         if self.engine.running or self.picker is not None:
             return
         self._save_settings()
+        self.notice = platforms.permission_problem() or ""
+        if self.notice:
+            self.root.bell()  # clicks would be silently dropped
+            self._refresh()
+            return
         try:
             self.engine.start(self._read_config())
         except ValueError as e:
@@ -400,7 +412,7 @@ class App:
             self.root,
             {"theme": self.theme_mode, "always_on_top": self.always_on_top,
              "opacity": self.opacity, "sounds": self.sounds},
-            test_sound=lambda: sounds.play(started=True),
+            test_sound=lambda: platforms.play_sound(started=True),
             on_close=self._personalize_closed,
         )
 
@@ -452,9 +464,10 @@ class App:
         if self.recorder_window is not None:
             self.recorder_window.refresh()
         self.polls += 1
-        if (self.polls % SYSTEM_THEME_POLLS == 0 and self.theme_mode.get() == "system"
-                and theme.resolve("system") != theme.current):
-            theme.apply(self.root, "system")  # Windows switched light/dark
+        if self.polls % SYSTEM_THEME_POLLS == 0:
+            if self.theme_mode.get() == "system" and theme.resolve("system") != theme.current:
+                theme.apply(self.root, "system")  # the OS switched light/dark
+            self.notice = platforms.permission_problem() or ""
         self._refresh()
         self._poll_job = self.root.after(POLL_MS, self._poll)
 
@@ -465,14 +478,14 @@ class App:
             # fail-safe, repeat finished, playback.
             self.was_running = running
             if self.sounds.get():
-                sounds.play(started=running)
+                platforms.play_sound(started=running)
         self.start_button.state(["disabled" if running else "!disabled"])
         self.stop_button.state(["!disabled" if running else "disabled"])
         _set_enabled(self.pick_button, not running)
         _set_enabled(self.hotkey_button, not running)
         _set_enabled(self.recorder_button, not running)
-        if self.error and not running:
-            self.status.config(text=self.error, foreground=theme.color("error"))
+        if (self.error or self.notice) and not running:
+            self.status.config(text=self.error or self.notice, foreground=theme.color("error"))
             return
         n = self.engine.clicks
         clicks = f"{n:,} click" + ("" if n == 1 else "s")

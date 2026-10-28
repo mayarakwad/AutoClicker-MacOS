@@ -4,7 +4,7 @@ from tkinter import ttk
 
 import theme
 from engine import PlaybackConfig
-from mouse_io import on_screen
+from platforms import on_screen
 from recorder import ClickRecorder
 
 

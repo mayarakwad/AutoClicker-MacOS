@@ -3,7 +3,6 @@ a fake mouse, so nothing is really clicked or hooked."""
 import time
 import unittest
 
-from pynput.mouse import Button
 
 from engine import ClickEngine, PlaybackConfig, Step
 from recorder import ClickRecorder, dump_steps, load_steps
@@ -19,21 +18,19 @@ class ClickRecorderTest(unittest.TestCase):
     def test_records_presses_with_delays(self):
         self.recorder._last = time.perf_counter()
         time.sleep(0.05)
-        self.recorder._on_click(10, 20, Button.left, True)
-        self.recorder._on_click(10, 20, Button.left, False)  # release: ignored
+        self.recorder._on_press(10, 20, "left")
         time.sleep(0.03)
-        self.recorder._on_click(-5, 7, Button.right, True)
-        self.recorder._on_click(1, 1, Button.middle, True)
+        self.recorder._on_press(-5, 7, "right")
+        self.recorder._on_press(1, 1, "middle")
         self.assertEqual([(s.button, s.x, s.y) for s in self.steps],
                          [("left", 10, 20), ("right", -5, 7), ("middle", 1, 1)])
         self.assertGreaterEqual(self.steps[0].delay_ms, 50)
         self.assertGreaterEqual(self.steps[1].delay_ms, 30)
         self.assertGreaterEqual(self.steps[2].delay_ms, 1)  # never 0
 
-    def test_skips_own_windows_and_side_buttons(self):
+    def test_skips_own_windows(self):
         self.own.add((5, 5))
-        self.recorder._on_click(5, 5, Button.left, True)
-        self.recorder._on_click(6, 6, Button.x1, True)
+        self.recorder._on_press(5, 5, "left")
         self.assertEqual(self.steps, [])
 
 
@@ -65,8 +62,8 @@ class PlaybackTest(unittest.TestCase):
         self.engine.start(PlaybackConfig(steps))
         self.engine.join(2)
         elapsed = time.perf_counter() - started
-        self.assertEqual(self.mouse.clicked, [(Button.left, 1, (1, 2)), (Button.right, 1, (3, 4)),
-                                              (Button.middle, 1, (5, 6))])
+        self.assertEqual(self.mouse.clicked, [("left", 1, (1, 2)), ("right", 1, (3, 4)),
+                                              ("middle", 1, (5, 6))])
         self.assertEqual(self.engine.stop_reason, "finished")
         self.assertGreaterEqual(elapsed, 0.115)
         self.assertLess(elapsed, 0.2)

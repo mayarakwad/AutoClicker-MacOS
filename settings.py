@@ -1,4 +1,5 @@
-"""Settings file: %APPDATA%\\AutoClicker\\settings.json.
+"""Settings file: settings.json in platforms.settings_folder()
+(%APPDATA%\\AutoClicker on Windows, ~/Library/Application Support/AutoClicker on macOS).
 
 Plain dict in, plain dict out. The UI decides which values are valid, so a
 missing, corrupt or hand-edited file just falls back to defaults.
@@ -7,10 +8,11 @@ import json
 import os
 from pathlib import Path
 
+from platforms import settings_folder
+
 
 def default_path():
-    base = os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming"
-    return Path(base) / "AutoClicker" / "settings.json"
+    return settings_folder() / "settings.json"
 
 
 def load(path=None):

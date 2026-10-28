@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Windows desktop auto clicker modeled on OP Auto Clicker. Python 3.12 + tkinter (UI) + pynput (mouse control, global hotkeys), packaged later with PyInstaller.
+Desktop auto clicker for Windows and macOS, modeled on OP Auto Clicker. Python 3.12 + tkinter (UI). Mouse control and global hotkeys come from pynput + Win32 on Windows and Quartz (pyobjc) on macOS. Packaged with PyInstaller.
 
 Built in phases; the user tests each phase before the next one starts and says "commit this phase" when it works. Don't commit until they do, and stop after each phase.
 
@@ -14,6 +14,11 @@ Built in phases; the user tests each phase before the next one starts and says "
 4. Record & Playback: record clicks with positions and delays, play once or loop (done)
 5. `build.bat` → single `dist\AutoClicker.exe` via PyInstaller `--onefile --windowed` (built; see Packaging)
 6. Personalize dialog: theme (system/light/dark), always on top, opacity, start/stop sounds; window position remembered (built)
+7. macOS version (built, **not yet run on a real Mac**; the user will test on a borrowed or rented Mac):
+   - M1: OS-specific code moved into `platforms/` (verified on Windows).
+   - M2: `platforms/macos.py` (tested only against a fake Quartz).
+   - M3: `build_mac.sh` plus the GitHub Actions build.
+   - The user has no Mac. Expect the first real-Mac test to need fixes.
 
 Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 1 ms); the status line shows Running/Stopped and the click count.
 
@@ -31,6 +36,8 @@ cmd /c C:\Projects\AutoClicker\build.bat          # -> dist\AutoClicker.exe (fro
 cmd /c C:\Projects\AutoClicker\make_shortcut.bat  # Desktop shortcut: venv pythonw.exe + main.py + app icon
 ```
 
+On a Mac: `.venv/bin/python main.py` to run, `bash build_mac.sh` to build `dist/AutoClicker.app` and `dist/AutoClicker-mac.zip`. Pushing to GitHub runs `.github/workflows/build-mac.yml` (macos-latest: unit tests, build, upload the zip, check the app starts).
+
 ## Packaging
 
 - PyInstaller's contrib hook (`hook-pynput`) already collects pynput's backend submodules, so no `--hidden-import` is needed.
@@ -43,8 +50,20 @@ cmd /c C:\Projects\AutoClicker\make_shortcut.bat  # Desktop shortcut: venv pytho
   - The user runs the app through the Desktop shortcut from `make_shortcut.bat` (OneDrive Desktop).
   - The venv's `pythonw.exe` is a launcher that starts the base install's `pythonw.exe`, which is also PSF-signed. So the app's window belongs to the base `pythonw.exe` process, not the venv one.
 - To test a frozen build end to end, launch it with `APPDATA` pointed at a temp folder, so it never touches the user's real settings.
+- `build.bat` passes `--exclude-module platforms.macos` and `build_mac.sh` passes `--exclude-module platforms.windows`. PyInstaller follows both branches of `platforms/__init__.py`.
+- macOS app:
+  - It's a `--windowed` onedir `.app` (PyInstaller deprecates onefile `.app`s) with `assets/app.icns`, and `assets/app.png` bundled for `iconphoto`.
+  - It's ad-hoc signed, not with a Developer ID. So Gatekeeper's "Open Anyway" is needed on other Macs, and TCC permissions may need re-granting after each rebuild.
+  - `ditto` makes the zip, because GitHub's artifact upload alone would drop the app's symlinks and permissions.
+  - It's built for the build machine's chip only (arm64 on the GitHub runner).
+- `assets/make_icon.py` writes `app.ico`, `app.png` and `app.icns` (PNG entries, written directly, so no `iconutil` is needed).
 
 ## Architecture
+
+OS layer: everything OS-specific lives in `platforms/windows.py` and `platforms/macos.py`, which define the same names. `platforms/__init__.py` imports one of them by `sys.platform`, and the rest of the app imports only from `platforms`.
+- The names are: `Mouse`, `PointPicker`, `MouseListener`, `KeySource`, `on_screen`, `is_own_window`, `play_sound`, `settings_folder`, `system_uses_dark`, `set_window_dark`, `permission_problem`, `request_permissions`, `prepare_process`, `set_app_icon`, plus the constants (`KEY_NAMES`, `MODIFIER_LABELS`, `TYPING_MODIFIERS`, `EXAMPLE_COMBO`, `OS_NAME`, `NATIVE_THEME`, `NATIVE_DARK`).
+- Add a new OS-specific function to both backends and to the import lists in `__init__.py`. `tests/test_macos_backend.py` checks the Mac module defines everything the package imports.
+- Buttons are passed around as names (`"left"`, `"right"`, `"middle"`). Keys are OS-independent names (`"f6"`, `"a"`, `"page_up"`); `"win"` is the Windows key on Windows and Command on macOS.
 
 Several threads; only the main thread touches tkinter:
 
@@ -53,26 +72,28 @@ Several threads; only the main thread touches tkinter:
   - Esc always stops a running engine first (fail-safe priority, which also covers playback), then also cancels a pick, a hotkey recording or a click recording.
   - While the Record & Playback window is open, `"toggle"` goes to `RecorderWindow.toggle()` (play/stop) instead of the normal clicker, and `_poll` calls its `refresh()`.
   - `close()` cancels the pending `after` jobs.
-- **Hotkey thread (`hotkeys.HotkeyListener`)**: a pynput keyboard listener. It only observes keys, never suppresses them, so Esc and the hotkey still reach other apps. Callbacks only queue events, and held-key auto-repeat is ignored.
-  - Keys are named from the Windows virtual-key code (`vk_name`), never pynput's `char`, because Ctrl+A reports char `'\x01'`. Left and right modifiers share one name.
+- **Hotkey thread (`platforms.KeySource`, driven by `hotkeys.HotkeyListener`)**: it only observes keys, never suppresses them, so Esc and the hotkey still reach other apps. `KeySource` calls `on_press(name, modifiers)` / `on_release(name)`. `HotkeyListener` holds the OS-independent logic: it only queues events and ignores held-key auto-repeat.
+  - On Windows it's a pynput keyboard listener. Keys are named from the virtual-key code (`vk_name`), never pynput's `char`, because Ctrl+A reports char `'\x01'`. Left and right modifiers share one name.
+  - On macOS it's a listen-only Quartz event tap. Keys are named from key codes via `platforms/macos_keys.py` (pure Python, tested on any OS; ANSI positions, so letters follow physical position, not layout), and modifiers come from the event's flags. pynput isn't used on macOS because its keyboard listener crashes on recent macOS.
   - A hotkey is a canonical combo string: modifiers in `MODIFIER_ORDER`, then the key (`"ctrl+shift+f6"`). The press must match the modifiers exactly.
-  - Modifiers come from `GetAsyncKeyState` at press time (`held_modifiers`, injectable for tests), not tracked key-ups, so a missed release can't leave Ctrl stuck.
-  - `combo_problem()` rejects Esc (fail-safe) and typing keys without Ctrl/Alt.
+  - On Windows, modifiers come from `GetAsyncKeyState` at press time (`held_modifiers`), not tracked key-ups, so a missed release can't leave Ctrl stuck.
+  - `combo_problem()` rejects Esc (fail-safe) and typing keys without one of `platforms.TYPING_MODIFIERS` (Ctrl/Alt on Windows; Cmd/Ctrl/Option on macOS).
   - `record(cb)` makes the next non-modifier press go to `cb` instead of toggling. The Hotkey setting dialog (`hotkey_dialog.HotkeyDialog`) records through this global listener, not Tk key events, so a recorded name is exactly what the listener matches. App forwards `("recorded", combo)` to `dialog.key_pressed`.
-- **Pick hook thread (`mouse_io.PointPicker`)**: exists only while picking. It's a pynput mouse listener whose `win32_event_filter` captures the next left button down, swallows the down/up pair system-wide with `suppress_event()`, then stops itself. While picking, the main window is withdrawn, a cursor-following tooltip shows X/Y, F6 is ignored and Esc cancels.
-- **Click recorder thread (`recorder.ClickRecorder`)**: exists only while recording. It's a pynput mouse listener that turns each button press into a `Step(delay_ms, button, x, y)`, with the delay measured since the previous press (or since `start()`).
+- **Pick hook thread (`platforms.PointPicker`)**: exists only while picking. It captures the next left button down, swallows the down/up pair system-wide, then stops itself. On Windows that's a pynput `win32_event_filter` with `suppress_event()`; on macOS it's an active Quartz event tap returning `None`. While picking, the main window is withdrawn, a cursor-following tooltip shows X/Y, F6 is ignored and Esc cancels.
+- **Click recorder thread (`recorder.ClickRecorder` on `platforms.MouseListener`)**: exists only while recording. It turns each left/right/middle press into a `Step(delay_ms, button, x, y)`, with the delay measured since the previous press (or since `start()`).
   - It doesn't suppress clicks.
-  - It skips presses on this process's own windows (`mouse_io.is_own_window`, which compares the PID of the window under the point).
+  - It skips presses on this process's own windows (`platforms.is_own_window` compares the PID of the window under the point).
   - `RecorderWindow` (modal) makes itself topmost while recording, so its Stop button is reachable without a taskbar click that would get recorded.
 - **Click thread (`engine.ClickEngine`)**: has no UI imports. The UI calls `start(config)` / `stop(reason)` and reads `running`, `clicks` and `stop_reason`.
   - `start(ClickConfig)` runs `_run`, interval clicking. `clicks` counts actions, so a double click counts once, and `repeat` compares against it.
   - `start(PlaybackConfig(steps, loop))` runs `_play`. Each step waits its `delay_ms` (deadline-based) then calls `click_at`, so playback returns the cursor too. The recorder window uses the App's single engine, so the main status line shows playback as Running.
   - The top-left-corner fail-safe lives in `_wait_until`, shared by both run kinds. Esc is handled by the UI as `stop("Esc pressed")`.
 
-`mouse_io.Mouse` is the engine's output:
-- `click()` at the cursor goes through pynput.
-- `click_at(x, y)` sends one SendInput batch: absolute move to X/Y, button down/up (×2 for double), then a move back to where the cursor was.
-- Keep `click_at` a single batch. Separate SetCursorPos + SendInput calls race (the click can land after the cursor is restored).
+`platforms.Mouse` is the engine's output:
+- `click()` clicks at the cursor. On Windows it uses pynput.
+- `click_at(x, y)` moves to X/Y, clicks (down/up, ×2 for double), then moves back to where the cursor was.
+  - On Windows it's one SendInput batch. Keep it one batch: separate SetCursorPos + SendInput calls race, and the click can land after the cursor is restored. Moving the physical mouse at that exact instant can still nudge a click a few pixels; this was seen in testing while the user was moving the mouse.
+  - On macOS it's a run of `CGEventPost` mouse events, which stay in order. The click state field 1, 2 makes a double click.
 - Restoring the cursor is deliberate: if the cursor stayed parked at X/Y, the corner fail-safe would be unreachable at short intervals.
 - `normalize()` rounds up because Windows maps absolute coordinates back with `n * size // 65536`. This was verified pixel-exact on the user's 1920×1080 screen.
 
@@ -96,7 +117,8 @@ Personalization:
 - `theme_mode`, `always_on_top`, `opacity` and `sounds` are App Tk variables in `_setting_vars`. `_follow_look` applies them and traces changes.
   - `PersonalizeDialog` edits those variables directly, so changes preview live. Cancel restores the values it saw on open.
   - Opacity applies to the main window only.
-- `_refresh` detects running→stopped and stopped→running transitions, so every start and stop (any cause, including playback) can beep. `sounds.play` runs `winsound.Beep` on a thread.
+- `_refresh` detects running→stopped and stopped→running transitions, so every start and stop (any cause, including playback) can beep. `platforms.play_sound` runs `winsound.Beep` on a thread (Windows) or `afplay` with system sounds (macOS).
+- On macOS the native `aqua` look has its own dark mode (`NATIVE_DARK`). `theme.apply` then skips the clam styling, background colors and dropdown recoloring, and `set_window_dark` sets each window's appearance through `::tk::unsupported::MacWindowStyle appearance`.
 - The window position (`window_x`/`window_y`) is saved only while `root.state() == "normal"`, because minimized windows report -32000. It's restored only if a title-bar point is `on_screen`.
 
 The UI enables the offset, repeat and X/Y entries through `trace_add` on their option variables, not widget `command=`, so values set in code (e.g. restored settings) update the entries too. X/Y allow a leading minus (screens left of or above the main one) and are checked with `on_screen()`. Every other number field accepts digits only.
@@ -105,6 +127,16 @@ Engine timing details that are easy to break:
 - Clicks are scheduled against `perf_counter` deadlines (no drift, no catch-up bursts).
 - Waiting uses `time.sleep` in slices of at most 50 ms, so stop and the fail-safe react quickly even with long intervals. `time.sleep` uses a high-resolution timer on Python 3.11+ on Windows. Don't replace it with `Event.wait`, which falls back to about 15.6 ms granularity, especially while the window is minimized.
 
-`main.enable_dpi_awareness()` must run before the Tk root is created. pynput does not set DPI awareness itself, and without it cursor coordinates are scaled wrongly on 125%/150% displays (this matters for Pick location and recording).
+`platforms.prepare_process()` must run before the Tk root is created. On Windows it turns on DPI awareness: pynput doesn't, and without it cursor coordinates are scaled wrongly on 125%/150% displays (this matters for Pick location and recording). On macOS it does nothing, because Quartz and Tk both use points with a top-left origin.
+
+macOS permissions:
+- Clicking needs Accessibility, and key/mouse event taps need Input Monitoring.
+- `permission_problem()` returns a status-line message when either is missing. `App` shows it in place of the status, blocks Start, re-checks every `SYSTEM_THEME_POLLS`, and calls `request_permissions()` once at launch.
+- `_EventTap` retries creating its tap every 2 s, so a hotkey starts working once permission is granted, without a restart.
 
 Tests inject a fake mouse via `ClickEngine(mouse=...)`, which must provide `position`, `click(button, count=1)` and `click_at(x, y, button, count=1)`. Tests must never send real input.
+
+Mac tests:
+- `tests/test_macos_backend.py` imports `platforms/macos.py` against a fake `Quartz`/`HIServices`. The fake contains only the pyobjc names the backend may use, with real pyobjc 12 values, so a misspelled name fails on any OS.
+- When adding a Quartz call, first check that the name exists in pyobjc's metadata, then add it to the fake.
+- `tests/test_platform_macos.py` runs real Quartz checks, only on a Mac (CI).

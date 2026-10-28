@@ -15,7 +15,7 @@ echo Building...
 .venv\Scripts\python -m PyInstaller --noconfirm --clean --log-level WARN ^
     --onefile --windowed --name AutoClicker ^
     --icon assets\app.ico --add-data "assets\app.ico;assets" ^
-    --version-file version_info.txt ^
+    --version-file version_info.txt --exclude-module platforms.macos ^
     main.py || goto :failed
 
 echo.

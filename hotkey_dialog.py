@@ -4,8 +4,9 @@ from tkinter import ttk
 
 import theme
 from hotkeys import DEFAULT_HOTKEY, combo_problem, display_name
+from platforms import EXAMPLE_COMBO
 
-HINT = "Click Change, then press the new key or combination (e.g. F8 or Ctrl+Shift+S)."
+HINT = f"Click Change, then press the new key or combination (e.g. F8 or {display_name(EXAMPLE_COMBO)})."
 
 
 class HotkeyDialog:

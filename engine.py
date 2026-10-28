@@ -10,11 +10,9 @@ import threading
 import time
 from dataclasses import dataclass
 
-from pynput.mouse import Button
+from platforms import Mouse
 
-from mouse_io import Mouse
-
-BUTTONS = {"left": Button.left, "right": Button.right, "middle": Button.middle}
+BUTTONS = ("left", "right", "middle")
 
 # Fail-safe: the cursor within this many pixels of the main screen's
 # top-left corner (0, 0) stops clicking.
@@ -106,7 +104,7 @@ class ClickEngine:
             self._thread.join(timeout)
 
     def _run(self, config):
-        button = BUTTONS[config.button]
+        button = config.button
         count = 2 if config.double else 1
         next_click = time.perf_counter() + next_delay(config)
         while self._wait_until(next_click):
@@ -133,7 +131,7 @@ class ClickEngine:
                 next_click += step.delay_ms / 1000
                 if not self._wait_until(next_click):
                     return
-                self._mouse.click_at(step.x, step.y, BUTTONS[step.button])
+                self._mouse.click_at(step.x, step.y, step.button)
                 self.clicks += 1
                 next_click = max(next_click, time.perf_counter())  # no catch-up bursts
             if not playback.loop:

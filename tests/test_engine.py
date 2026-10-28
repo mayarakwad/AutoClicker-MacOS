@@ -5,7 +5,6 @@ Run from the project folder:  python -m unittest
 import time
 import unittest
 
-from pynput.mouse import Button
 
 from engine import ClickConfig, ClickEngine, next_delay
 
@@ -57,7 +56,7 @@ class ClickEngineTest(unittest.TestCase):
     def test_uses_chosen_button(self):
         self.run_for(0.1, interval_ms=5, button="right")
         self.assertTrue(self.mouse.clicked)
-        self.assertTrue(all(b == Button.right for b, _, _ in self.mouse.clicked))
+        self.assertTrue(all(b == "right" for b, _, _ in self.mouse.clicked))
 
     def test_double_click_counts_once(self):
         self.run_for(0.1, interval_ms=5, double=True)

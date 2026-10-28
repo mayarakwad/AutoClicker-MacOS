@@ -1,14 +1,14 @@
 """Light/dark theming for every window: ttk styles, dropdown lists, title bars.
 
-Light is Windows' native 'vista' look. Dark is ttk's 'clam' theme with our
-own colors. 'system' follows Windows' app mode (Settings > Personalization >
-Colors). Status colors come from color(), so they stay readable in both.
+Light is the OS's native look ('vista' on Windows, 'aqua' on macOS). On
+macOS the native look has its own dark mode; on Windows dark is ttk's
+'clam' theme with our own colors. 'system' follows the OS's light/dark
+setting. Status colors come from color(), so they stay readable in both.
 """
-import ctypes
-import ctypes.wintypes as wt
 import tkinter as tk
-import winreg
 from tkinter import ttk
+
+from platforms import NATIVE_DARK, NATIVE_THEME, set_window_dark, system_uses_dark
 
 MODES = ("system", "light", "dark")
 
@@ -31,16 +31,6 @@ BG, FIELD, FG, MUTED, BORDER = "#202020", "#2b2b2b", "#f0f0f0", "#7a7a7a", "#3f3
 BUTTON, HOVER, PRESSED, ACCENT, ACCENT_HOVER = "#2d2d2d", "#3a3a3a", "#454545", "#4c9aff", "#78b4ff"
 TRACK = "#3a3a3a"  # slider track
 
-DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-SWP_REDRAW_FRAME = 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020  # no size/move/z-order/activate; frame changed
-
-_user32 = ctypes.WinDLL("user32")
-_user32.GetParent.argtypes = (wt.HWND,)
-_user32.GetParent.restype = wt.HWND
-_user32.SetWindowPos.argtypes = (wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wt.UINT)
-_dwmapi = ctypes.WinDLL("dwmapi")
-_dwmapi.DwmSetWindowAttribute.argtypes = (wt.HWND, wt.DWORD, ctypes.c_void_p, wt.DWORD)
-
 current = "light"
 _images = {}  # Tk drops PhotoImages that Python no longer references
 
@@ -49,19 +39,10 @@ def color(name):
     return PALETTES[current][name]
 
 
-def windows_uses_dark():
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
-            return winreg.QueryValueEx(key, "AppsUseLightTheme")[0] == 0
-    except OSError:
-        return False
-
-
 def resolve(mode):
     """'system' -> 'light' or 'dark'; other modes unchanged."""
     if mode == "system":
-        return "dark" if windows_uses_dark() else "light"
+        return "dark" if system_uses_dark() else "light"
     return mode
 
 
@@ -70,29 +51,25 @@ def apply(root, mode):
     global current
     current = resolve(mode)
     style = ttk.Style(root)
-    if current == "dark":
+    custom_dark = current == "dark" and not NATIVE_DARK
+    if custom_dark:
         style.theme_use("clam")
         _configure_dark(style)
         _install_images(style, root)
     else:
-        style.theme_use("vista")
+        style.theme_use(NATIVE_THEME)
     for widget in _walk(root):
         if isinstance(widget, (tk.Tk, tk.Toplevel)):
             style_window(widget)
-        elif isinstance(widget, ttk.Combobox):
+        elif isinstance(widget, ttk.Combobox) and not NATIVE_DARK:
             _style_dropdown(widget)
 
 
 def style_window(window):
     """Background and title bar for one window; new dialogs call this themselves."""
-    window.configure(background=color("window"))
-    window.update_idletasks()
-    hwnd = _user32.GetParent(window.winfo_id())
-    if hwnd:
-        dark = ctypes.c_int(current == "dark")
-        _dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(dark), ctypes.sizeof(dark))
-        # Repaint the frame now rather than on the next focus change.
-        _user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_REDRAW_FRAME)
+    if not NATIVE_DARK:  # a native dark look picks its own background
+        window.configure(background=color("window"))
+    set_window_dark(window, current == "dark")
 
 
 def _walk(widget):

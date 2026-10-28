@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 import theme
+from platforms import OS_NAME
 
 DEFAULTS = {"theme": "system", "always_on_top": False, "opacity": 100, "sounds": False}
 MIN_OPACITY = 40
@@ -33,7 +34,7 @@ class PersonalizeDialog:
         ttk.Label(frame, text="Theme").grid(row=0, column=0, sticky="w", padx=(0, 14))
         modes = ttk.Frame(frame)
         modes.grid(row=0, column=1, columnspan=2, sticky="w")
-        for i, (value, label) in enumerate((("system", "Same as Windows"), ("light", "Light"), ("dark", "Dark"))):
+        for i, (value, label) in enumerate((("system", f"Same as {OS_NAME}"), ("light", "Light"), ("dark", "Dark"))):
             ttk.Radiobutton(modes, text=label, value=value,
                             variable=variables["theme"]).grid(row=0, column=i, padx=(0, 14))
 

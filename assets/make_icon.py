@@ -1,12 +1,16 @@
-"""Draws assets/app.ico: a white cursor with a click burst on a blue tile.
+"""Draws the app icon (a white cursor with a click burst on a blue tile) as
+assets/app.ico (Windows), app.icns (macOS .app) and app.png (macOS Dock).
 
 Run from the project folder:  .venv\\Scripts\\python assets\\make_icon.py
 
-Pure Python (no Pillow): each size is rasterized with supersampling and
-stored as a 32-bit BMP entry, which every Windows version and Tk can read.
+Pure Python (no Pillow), so it runs on any OS: each size is rasterized with
+supersampling. The .ico uses 32-bit BMP entries, which every Windows version
+and Tk can read; the .icns and .png hold PNG data.
 """
+import functools
 import math
 import struct
+import zlib
 from pathlib import Path
 
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
@@ -58,6 +62,7 @@ def color_at(x, y):
     return BLUE
 
 
+@functools.cache
 def render(size):
     """Rows of (r, g, b, a), top row first."""
     n = 4 if size <= 64 else 2  # samples per pixel side
@@ -94,7 +99,30 @@ def write_ico(path):
     path.write_bytes(out + b"".join(images))
 
 
+def png_bytes(rows):
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+    size = len(rows)
+    raw = b"".join(b"\x00" + bytes(channel for pixel in row for channel in pixel) for row in rows)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
+# macOS icon entries: (type, pixel size); all hold PNG data.
+ICNS_ENTRIES = (("icp4", 16), ("icp5", 32), ("ic11", 32), ("ic12", 64), ("ic07", 128),
+                ("ic13", 256), ("ic08", 256), ("ic14", 512), ("ic09", 512))
+
+
+def write_icns(path):
+    entries = b"".join(kind.encode() + struct.pack(">I", 8 + len(png)) + png
+                       for kind, png in ((kind, png_bytes(render(size))) for kind, size in ICNS_ENTRIES))
+    path.write_bytes(b"icns" + struct.pack(">I", 8 + len(entries)) + entries)
+
+
 if __name__ == "__main__":
-    target = Path(__file__).with_name("app.ico")
-    write_ico(target)
-    print(f"wrote {target} ({target.stat().st_size:,} bytes)")
+    here = Path(__file__).parent
+    write_ico(here / "app.ico")                          # Windows exe and window icon
+    (here / "app.png").write_bytes(png_bytes(render(256)))  # macOS Dock icon when run from source
+    write_icns(here / "app.icns")                        # macOS .app icon
+    for name in ("app.ico", "app.png", "app.icns"):
+        print(f"wrote {here / name} ({(here / name).stat().st_size:,} bytes)")
