@@ -86,7 +86,7 @@ On an Apple Silicon Mac (M1 or later), paste this into Terminal. It downloads th
 mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.com/mayarakwad/AutoClicker/releases/latest/download/AutoClicker-mac.zip && ditto -x -k /tmp/AutoClicker-mac.zip ~/Applications && open ~/Applications/AutoClicker.app
 ```
 
-Then allow it under Accessibility and Input Monitoring (see [Permissions](#permissions)). Releases are published by the GitHub build when a version tag is pushed: `git tag v1.0.1` then `git push origin v1.0.1`.
+Then allow it under Accessibility and Input Monitoring (see [Permissions](#permissions)). Releases are published by the GitHub build when a version tag is pushed: `git tag v1.0.2` then `git push origin v1.0.2`.
 
 ### Run from source
 

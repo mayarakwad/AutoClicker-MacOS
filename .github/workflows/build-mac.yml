@@ -1,6 +1,6 @@
 # Builds AutoClicker.app on a GitHub-hosted Mac, runs the tests there, and
 # checks the built app starts. Download the app from the run's Artifacts.
-# Pushing a version tag (git tag v1.0.1 && git push origin v1.0.1) also
+# Pushing a version tag (git tag v1.0.2 && git push origin v1.0.2) also
 # publishes the app as a public GitHub Release.
 # (Real clicking and hotkeys can't be tested here: macOS only allows them
 # after a person grants permission in System Settings.)

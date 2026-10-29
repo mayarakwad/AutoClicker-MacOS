@@ -31,7 +31,8 @@ class WindowsExportTest(unittest.TestCase):
         self.assertFalse(export_windows.LEFT_OUT & set(files))
         self.assertFalse([name for name in files if name.startswith("windows/")])
         for name in ("main.py", "platforms/windows.py", "build.bat", ".github/workflows/build-windows.yml",
-                     ".github/annotate_test_failures.py", "assets/app.ico"):
+                     ".github/annotate_test_failures.py", "assets/app.ico", "build_installer.bat",
+                     "installer/AutoClicker.iss", "installer/pin_taskbar.ps1", ".github/test_installer.ps1"):
             self.assertIn(name, files)
         self.assertIn(b"AutoClicker for Windows", files["README.md"])
         self.assertIn(b"This repository is generated", files["CLAUDE.md"])

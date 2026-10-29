@@ -30,7 +30,8 @@ Built in phases; the user tests each phase before the next one starts and says "
    - The export takes HEAD, leaves out `LEFT_OUT` (the Mac-only files), and lays `windows/` on top. `windows/` holds that repo's README, CLAUDE.md, Windows-only `platforms/__init__.py` and `.github/workflows/build-windows.yml`. Requirements lose their darwin lines.
    - After committing here, run `.venv\Scripts\python tools\export_windows.py C:\Projects\AutoClicker-Windows`, then commit and push there. For a release, tag both repos.
    - New Mac-only file: add it to `LEFT_OUT`. New `platforms` name: also add it to `windows/platforms/__init__.py`. `tests/test_windows_export.py` checks both.
-   - The Windows build workflow tests, builds `AutoClicker.exe`, checks it starts, and publishes a release for `v*` tags. The README's one-command install downloads `releases/latest/download/AutoClicker.exe` with `Invoke-WebRequest`.
+   - `windows/` also holds the Windows-only installer: `installer/AutoClicker.iss` (Inno Setup 6.3 or later), `installer/pin_taskbar.ps1`, `build_installer.bat` (-> `dist\AutoClicker-Setup.exe`) and `.github/test_installer.ps1`. See the Installer section of `windows/CLAUDE.md`.
+   - The Windows build workflow tests, builds `AutoClicker.exe` and `AutoClicker-Setup.exe`, checks the exe starts, installs and uninstalls the installer silently (just me and all users), and publishes both for `v*` tags. The README links the installer; its one-command install downloads `releases/latest/download/AutoClicker.exe` with `Invoke-WebRequest`.
 
 Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 0.1 ms, `engine.MIN_INTERVAL_NS`); the status line shows Running/Stopped and the click count.
 
