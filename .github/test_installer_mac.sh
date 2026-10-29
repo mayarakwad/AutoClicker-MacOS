@@ -50,18 +50,21 @@ starts() {  # the installed app runs for 10 s without exiting
     return 1
 }
 
-show_install_log() {  # what the Dock and Desktop scripts said
+log_lines() { wc -l < /var/log/install.log 2>/dev/null || echo 0; }
+
+show_install_log() {  # what the Dock and Desktop scripts said since line $2 of the install log
     local lines
-    lines=$(grep "AutoClicker:" /var/log/install.log 2>/dev/null | tail -n 10 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+    lines=$(tail -n "+$(($2 + 1))" /var/log/install.log 2>/dev/null | grep "AutoClicker:" | sed 's/.*AutoClicker: //; s/%/%25/g' | awk '{printf "%s%%0A", $0}')
     echo "::notice title=Installer scripts ($1)::${lines:-nothing logged}"
 }
 
 # $1 name, $2 app path, $3 "on"/"off" for the Dock and Desktop choices,
 # then the installer command to run.
 test_install() {
-    local name=$1 app=$2 extras=$3
+    local name=$1 app=$2 extras=$3 log_start
     shift 3
     echo "== $name"
+    log_start=$(log_lines)
     for run in 1 2; do  # the second run is an update over the first
         check "$name: installer run $run succeeds" "$@"
     done
@@ -78,7 +81,7 @@ test_install() {
         check "$name: app isn't added to the Dock" test "$(dock_count "$app/")" -eq 0
         check "$name: no Desktop link" test ! -L "$link"
     fi
-    show_install_log "$name"
+    show_install_log "$name" "$log_start"
     # Clean up for the next install.
     remove_from_dock "AutoClicker.app"
     rm -f "$link"
@@ -88,7 +91,7 @@ test_install() {
 echo "== Choices"
 choices=$(installer -showChoiceChangesXML -pkg "$pkg" | python3 -c '
 import plistlib, sys
-print(" ".join(sorted(c["choiceIdentifier"] for c in plistlib.loads(sys.stdin.buffer.read()))))')
+print(" ".join(sorted({c["choiceIdentifier"] for c in plistlib.loads(sys.stdin.buffer.read())})))')  # one entry per attribute
 check "the installer offers the app, Dock and Desktop choices (got: $choices)" test "$choices" = "app desktop dock"
 
 off=$(mktemp)
