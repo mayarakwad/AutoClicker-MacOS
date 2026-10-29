@@ -1,0 +1,17 @@
+#!/bin/sh
+# "Desktop link" choice of AutoClicker-Setup.pkg: puts a link named
+# AutoClicker on the Desktop of the user who is installing it. See common.sh.
+. "$(dirname "$0")/common.sh"
+
+link="$USER_HOME/Desktop/AutoClicker"
+# Never replace something of the user's that happens to have this name.
+if [ -e "$link" ] && [ ! -L "$link" ]; then
+    log "$link already exists; leaving it"
+    exit 0
+fi
+if as_user ln -sfn "$APP" "$link"; then
+    log "linked $link to $APP"
+else
+    log "couldn't make $link"
+fi
+exit 0

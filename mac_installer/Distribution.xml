@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Installer definition for dist/AutoClicker-Setup.pkg; build_mac_installer.sh
+     fills in @VERSION@. The Mac counterpart of the Windows Setup's options:
+     - Destination: install for all users (/Applications, needs an admin
+       password), for me only (~/Applications), or on another disk.
+     - Installation Type: Add to Dock and Desktop link, both ticked. -->
+<installer-gui-script minSpecVersion="2">
+    <title>AutoClicker @VERSION@</title>
+    <!-- The app is built for Apple Silicon only. -->
+    <options customize="always" require-scripts="false" hostArchitectures="arm64"/>
+    <domains enable_localSystem="true" enable_currentUserHome="true" enable_anywhere="true"/>
+    <allowed-os-versions>
+        <os-version min="11.0"/>
+    </allowed-os-versions>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+
+    <choices-outline>
+        <line choice="app"/>
+        <line choice="dock"/>
+        <line choice="desktop"/>
+    </choices-outline>
+    <choice id="app" title="AutoClicker" description="The AutoClicker app." enabled="false" selected="true">
+        <pkg-ref id="com.autoclicker.pkg.app"/>
+    </choice>
+    <choice id="dock" title="Add to Dock" start_selected="true"
+            description="Adds AutoClicker to the Dock of the user who is installing it.">
+        <pkg-ref id="com.autoclicker.pkg.dock"/>
+    </choice>
+    <choice id="desktop" title="Desktop link" start_selected="true"
+            description="Puts a link to AutoClicker on the Desktop of the user who is installing it.">
+        <pkg-ref id="com.autoclicker.pkg.desktop"/>
+    </choice>
+
+    <!-- Installed in this order, so the app is in place before the Dock and Desktop scripts run. -->
+    <pkg-ref id="com.autoclicker.pkg.app" version="@VERSION@" onConclusion="none">app.pkg</pkg-ref>
+    <pkg-ref id="com.autoclicker.pkg.dock" version="@VERSION@" onConclusion="none">dock.pkg</pkg-ref>
+    <pkg-ref id="com.autoclicker.pkg.desktop" version="@VERSION@" onConclusion="none">desktop.pkg</pkg-ref>
+</installer-gui-script>

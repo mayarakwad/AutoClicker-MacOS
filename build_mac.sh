@@ -24,8 +24,15 @@ echo "Building..."
     --exclude-module platforms.windows \
     main.py
 
+# Version from version_info.txt, which also sets the Windows exe's version.
+# Changing Info.plist breaks PyInstaller's ad-hoc signature, so sign again.
+version=$(sed -n "s/.*StringStruct('ProductVersion', '\([^']*\)').*/\1/p" version_info.txt)
+plutil -replace CFBundleShortVersionString -string "$version" dist/AutoClicker.app/Contents/Info.plist
+plutil -replace CFBundleVersion -string "$version" dist/AutoClicker.app/Contents/Info.plist
+codesign --force --sign - dist/AutoClicker.app
+
 rm -f dist/AutoClicker-mac.zip
 ditto -c -k --keepParent dist/AutoClicker.app dist/AutoClicker-mac.zip  # keeps the app's symlinks and permissions
 
 echo
-echo "Done: dist/AutoClicker.app (to share: dist/AutoClicker-mac.zip)"
+echo "Done: dist/AutoClicker.app $version (to share: dist/AutoClicker-mac.zip)"

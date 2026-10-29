@@ -1,0 +1,20 @@
+#!/bin/sh
+# "Add to Dock" choice of AutoClicker-Setup.pkg: adds the app to the Dock of
+# the user who is installing it. See common.sh.
+. "$(dirname "$0")/common.sh"
+
+# Already there (for example, when updating): adding it again would make two.
+if as_user defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q '/AutoClicker\.app/'; then
+    log "already in the Dock"
+    exit 0
+fi
+
+path=$(printf '%s/' "$APP" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+if as_user defaults write com.apple.dock persistent-apps -array-add \
+    "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>$path</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>"; then
+    as_user killall Dock  # the Dock reads its settings again when it restarts
+    log "added $APP to $USER_NAME's Dock"
+else
+    log "couldn't add AutoClicker to the Dock"
+fi
+exit 0

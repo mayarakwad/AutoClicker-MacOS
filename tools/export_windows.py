@@ -24,6 +24,9 @@ LEFT_OUT = {
     "assets/app.icns", "assets/app.png",
     "tests/test_macos_backend.py", "tests/test_macos_keys.py", "tests/test_platform_macos.py",
     "tools/__init__.py", "tools/export_windows.py", "tests/test_windows_export.py",
+    "build_mac_installer.sh", "mac_installer/Distribution.xml", "mac_installer/conclusion.html",
+    "mac_installer/scripts/common.sh", "mac_installer/scripts/dock_postinstall",
+    "mac_installer/scripts/desktop_postinstall", ".github/test_installer_mac.sh", "tests/test_mac_installer.py",
 }
 
 

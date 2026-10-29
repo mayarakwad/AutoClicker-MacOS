@@ -78,15 +78,36 @@ The Mac version shares all of the app's code except `platforms/macos.py`, which 
 
 **Not yet tested on a real Mac.** On GitHub's Macs the tests pass, the app builds, and it starts without errors. Real clicking, hotkeys and permissions can only be tried by a person on a Mac, so expect a round of fixes after the first real test.
 
+### Install
+
+On an Apple Silicon Mac (M1 or later), download **[AutoClicker-Setup.pkg](https://github.com/mayarakwad/AutoClicker-MacOS/releases/latest/download/AutoClicker-Setup.pkg)** from the latest release and open it. The installer asks:
+
+- **Where to install.** Under **Change Install Location**: **Install for all users of this computer** puts it in `/Applications` and needs an admin password. **Install for me only** puts it in `~/Applications` and doesn't. You can also pick another disk. (macOS's installer can't install into any other folder.)
+- **Extras.** Under **Customize**, **Add to Dock** and **Desktop link** are ticked; untick the ones you don't want. Both are for the user who runs the installer, even when installing for all users.
+
+If macOS says it can't verify the developer, go to **System Settings > Privacy & Security** and click **Open Anyway**. Then allow AutoClicker under Accessibility and Input Monitoring (see [Permissions](#permissions)).
+
+To update, run the newer installer. To uninstall, drag AutoClicker from Applications to the Trash, then drag it off the Dock and delete the Desktop link.
+
+The installer also works from Terminal, which skips the "can't verify the developer" step. For all users:
+
+```
+curl -fL -o /tmp/AutoClicker-Setup.pkg https://github.com/mayarakwad/AutoClicker-MacOS/releases/latest/download/AutoClicker-Setup.pkg && sudo installer -pkg /tmp/AutoClicker-Setup.pkg -target /
+```
+
+For just you, use `installer -pkg /tmp/AutoClicker-Setup.pkg -target CurrentUserHomeDirectory` (no `sudo`). Both add the Dock item and Desktop link.
+
 ### Install with one command
 
-On an Apple Silicon Mac (M1 or later), paste this into Terminal. It downloads the latest release, unpacks it into `~/Applications` and opens it:
+Without the installer, paste this into Terminal. It downloads the latest release, unpacks it into `~/Applications` and opens it:
 
 ```
-mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.com/mayarakwad/AutoClicker/releases/latest/download/AutoClicker-mac.zip && ditto -x -k /tmp/AutoClicker-mac.zip ~/Applications && open ~/Applications/AutoClicker.app
+mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.com/mayarakwad/AutoClicker-MacOS/releases/latest/download/AutoClicker-mac.zip && ditto -x -k /tmp/AutoClicker-mac.zip ~/Applications && open ~/Applications/AutoClicker.app
 ```
 
-Then allow it under Accessibility and Input Monitoring (see [Permissions](#permissions)). Releases are published by the GitHub build when a version tag is pushed: `git tag v1.0.2` then `git push origin v1.0.2`.
+Then allow it under Accessibility and Input Monitoring (see [Permissions](#permissions)).
+
+Releases are published by the GitHub build when a version tag is pushed: `git tag v1.0.2` then `git push origin v1.0.2`. Or, on GitHub, open **Actions > macOS build > Run workflow** and enter the tag. Either way, the tag must match the version in `version_info.txt`.
 
 ### Run from source
 
@@ -115,11 +136,19 @@ On a Mac:
 bash build_mac.sh
 ```
 
-This creates `dist/AutoClicker.app` and `dist/AutoClicker-mac.zip` for sharing. It's built for the Mac's own chip, which is Apple Silicon on the GitHub runner.
+This creates `dist/AutoClicker.app` and `dist/AutoClicker-mac.zip` for sharing. It's built for the Mac's own chip, which is Apple Silicon on the GitHub runner. The app's version comes from `version_info.txt`.
 
-Without a Mac, push this project to GitHub. `.github/workflows/build-mac.yml` then builds the app on a GitHub-hosted Mac, runs the tests and checks the app starts. Download **AutoClicker-mac** from the run's **Artifacts**.
+To build the installer as well:
 
-The app isn't signed with an Apple Developer ID, which has two effects:
+```
+bash build_mac_installer.sh
+```
+
+This creates `dist/AutoClicker-Setup.pkg` from the app and `mac_installer/`, using macOS's own `pkgbuild` and `productbuild`.
+
+Without a Mac, push this project to GitHub. `.github/workflows/build-mac.yml` then builds the app and the installer on a GitHub-hosted Mac, runs the tests, checks the app starts, and installs the installer for one user and for all users. Download **AutoClicker-mac** (the zip and the installer) from the run's **Artifacts**.
+
+The app and installer aren't signed with an Apple Developer ID, which has two effects:
 
 - **First launch:** on a Mac that downloaded it, macOS says it can't verify the developer. Open **System Settings > Privacy & Security** and click **Open Anyway**.
 - **After rebuilding:** each build is a new app as far as macOS is concerned, so you may need to allow Accessibility and Input Monitoring again.
@@ -150,6 +179,7 @@ The app isn't signed with an Apple Developer ID, which has two effects:
 | `tests/` | Unit tests. |
 | `build.bat` | Builds `dist\AutoClicker.exe`. |
 | `build_mac.sh` | Builds `dist/AutoClicker.app` (run on a Mac). |
+| `build_mac_installer.sh`, `mac_installer/` | Builds the Mac installer, `dist/AutoClicker-Setup.pkg` (run on a Mac). |
 | `.github/workflows/build-mac.yml` | Builds and tests the Mac app on GitHub Actions. |
 | `make_shortcut.bat` | Creates a Desktop shortcut that runs the app from source (for PCs with Smart App Control on). |
 | `version_info.txt` | Version details embedded in the exe. |

@@ -1,7 +1,10 @@
-# Builds AutoClicker.app on a GitHub-hosted Mac, runs the tests there, and
-# checks the built app starts. Download the app from the run's Artifacts.
-# Pushing a version tag (git tag v1.0.2 && git push origin v1.0.2) also
-# publishes the app as a public GitHub Release.
+# Builds AutoClicker.app and its installer, AutoClicker-Setup.pkg, on a
+# GitHub-hosted Mac, runs the tests there, checks the built app starts, and
+# installs the installer for me only and for all users. Download both from the
+# run's Artifacts. Pushing a version tag (git tag v1.0.2 && git push origin
+# v1.0.2) also publishes them as a public GitHub Release. So does running the
+# workflow by hand (Actions > macOS build > Run workflow) with a release tag
+# such as v1.0.2: the release and its tag are made on the commit it built.
 # (Real clicking and hotkeys can't be tested here: macOS only allows them
 # after a person grants permission in System Settings.)
 name: macOS build
@@ -10,6 +13,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a release with this new tag, e.g. v1.0.2 (must match version_info.txt). Leave empty to only build and test."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -48,11 +56,16 @@ jobs:
       - name: Build AutoClicker.app
         run: bash build_mac.sh
 
-      - name: Upload the app
+      - name: Build AutoClicker-Setup.pkg
+        run: bash build_mac_installer.sh
+
+      - name: Upload the app and installer
         uses: actions/upload-artifact@v4
         with:
           name: AutoClicker-mac
-          path: dist/AutoClicker-mac.zip
+          path: |
+            dist/AutoClicker-mac.zip
+            dist/AutoClicker-Setup.pkg
           if-no-files-found: error
 
       - name: Check the built app starts
@@ -71,21 +84,34 @@ jobs:
           fi
           kill "$pid"
 
-      - name: Publish release (v* tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Check the installer installs
+        run: bash .github/test_installer_mac.sh dist/AutoClicker-Setup.pkg
+
+      - name: Publish release (v* tags, or a release tag given when run by hand)
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
         run: |
+          # The tag must name the version built into the app (version_info.txt).
+          version=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" dist/AutoClicker.app/Contents/Info.plist)
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error title=Release tag doesn't match the version::$TAG was given, but dist/AutoClicker.app is version $version (version_info.txt)."
+            exit 1
+          fi
           cat > release-notes.md <<'EOF'
-          AutoClicker for macOS, Apple Silicon (M1 or later). Not yet tested by a person on a real Mac; please report what happens.
+          AutoClicker for macOS, Apple Silicon (M1 or later). Not yet tested by a person on a real Mac; please report what happens. Download with caution: it isn't signed with an Apple Developer ID.
 
-          Install and open it from Terminal:
+          **Installer:** download **AutoClicker-Setup.pkg** and open it. It lets you install for all users or just for you (or on another disk), and add AutoClicker to the Dock and a link to the Desktop. If macOS says it can't verify the developer, go to System Settings > Privacy & Security and click Open Anyway.
+
+          **Without the installer:** install and open it from Terminal:
 
           ```
-          mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.com/mayarakwad/AutoClicker/releases/latest/download/AutoClicker-mac.zip && ditto -x -k /tmp/AutoClicker-mac.zip ~/Applications && open ~/Applications/AutoClicker.app
+          mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.com/mayarakwad/AutoClicker-MacOS/releases/latest/download/AutoClicker-mac.zip && ditto -x -k /tmp/AutoClicker-mac.zip ~/Applications && open ~/Applications/AutoClicker.app
           ```
 
           Then allow AutoClicker under System Settings > Privacy & Security > Accessibility and Input Monitoring.
           EOF
-          gh release create "$GITHUB_REF_NAME" dist/AutoClicker-mac.zip \
-            --title "AutoClicker $GITHUB_REF_NAME" --notes-file release-notes.md
+          # --target makes the tag on this commit when it doesn't exist yet (runs by hand).
+          gh release create "$TAG" dist/AutoClicker-Setup.pkg dist/AutoClicker-mac.zip \
+            --target "$GITHUB_SHA" --title "AutoClicker $TAG" --notes-file release-notes.md
