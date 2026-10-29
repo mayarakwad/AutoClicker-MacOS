@@ -32,6 +32,14 @@ autoclicker_items() {  # how many Dock items point at any AutoClicker.app
     defaults read com.apple.dock persistent-apps 2>/dev/null | grep -c 'AutoClicker\.app/"' || true
 }
 
+dock_items() {  # the Dock's AutoClicker items, for messages
+    defaults read com.apple.dock persistent-apps 2>/dev/null | grep 'AutoClicker\.app/"' | sed 's/^ *//' | tr '\n' ' '
+}
+
+settle() {  # a restarted Dock rewrites its settings while it starts; let it finish, as a person would
+    sleep 5
+}
+
 remove_from_dock() {  # so the next install starts from a clean Dock
     python3 - "$1" <<'PY'
 import plistlib, subprocess, sys
@@ -79,7 +87,7 @@ test_install() {
     check "$name: app signature is intact" codesign --verify --deep --strict "$app"
     check "$name: app starts" starts "$app"
     if [ "$extras" = on ]; then
-        check "$name: app is in the Dock once (found $(dock_count "$app/"))" test "$(dock_count "$app/")" -eq 1
+        check "$name: app is in the Dock once (found: $(dock_items))" test "$(dock_count "$app/")" -eq 1
         check "$name: Desktop link opens $app" test "$(readlink "$link")" = "$app"
         check "$name: the Desktop link belongs to the user" test "$(stat -f %Su "$link" 2>/dev/null)" = "$(id -un)"
     else
@@ -122,9 +130,11 @@ test_install "All-users install without Dock and Desktop" /Applications/AutoClic
 echo "== Me-only install, then all users"
 log_start=$(log_lines)
 check "me-only install succeeds" installer -pkg "$pkg" -target CurrentUserHomeDirectory
+settle
 check "then the all-users install succeeds" sudo installer -pkg "$pkg" -target /
-check "the Dock has one AutoClicker item (found $(autoclicker_items))" test "$(autoclicker_items)" -eq 1
-check "it opens /Applications/AutoClicker.app" test "$(dock_count /Applications/AutoClicker.app/)" -eq 1
+settle
+check "the Dock has one AutoClicker item (found: $(dock_items))" test "$(autoclicker_items)" -eq 1
+check "it opens /Applications/AutoClicker.app (found: $(dock_items))" test "$(dock_count /Applications/AutoClicker.app/)" -eq 1
 check "the Desktop link opens /Applications/AutoClicker.app" test "$(readlink "$link")" = /Applications/AutoClicker.app
 show_install_log "Me-only install, then all users" "$log_start"
 remove_from_dock "AutoClicker.app"
