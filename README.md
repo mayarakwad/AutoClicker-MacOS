@@ -83,11 +83,13 @@ The Mac version shares all of the app's code except `platforms/macos.py`, which 
 On an Apple Silicon Mac (M1 or later), download **[AutoClicker-Setup.pkg](https://github.com/mayarakwad/AutoClicker-MacOS/releases/latest/download/AutoClicker-Setup.pkg)** from the latest release and open it. The installer asks:
 
 - **Where to install.** Under **Change Install Location**: **Install for all users of this computer** puts it in `/Applications` and needs an admin password. **Install for me only** puts it in `~/Applications` and doesn't. You can also pick another disk. (macOS's installer can't install into any other folder.)
-- **Extras.** Under **Customize**, **Add to Dock** and **Desktop link** are ticked; untick the ones you don't want. Both are for the user who runs the installer, even when installing for all users.
+- **Extras.** On the **Installation Type** step, **Add to Dock** and **Desktop link** are ticked; untick the ones you don't want. Both are for the user signed in at the screen (you, when you open the installer yourself), even when installing for all users. macOS may ask whether Installer can access your Desktop folder; click **OK** for the link.
 
 If macOS says it can't verify the developer, go to **System Settings > Privacy & Security** and click **Open Anyway**. Then allow AutoClicker under Accessibility and Input Monitoring (see [Permissions](#permissions)).
 
-To update, run the newer installer. To uninstall, drag AutoClicker from Applications to the Trash, then drag it off the Dock and delete the Desktop link.
+To update, run the newer installer and choose the same place as before. Installing in another place leaves the old copy there, so delete it (the Dock then points at the new one). Each version is a new app to macOS, so allow Accessibility and Input Monitoring again: if AutoClicker says one is missing although it looks switched on, select AutoClicker in that list, remove it with **−**, and allow it again.
+
+To uninstall, drag AutoClicker to the Trash from `/Applications` (or `~/Applications` if you installed it for yourself only), then drag it off the Dock and delete the Desktop link.
 
 The installer also works from Terminal, which skips the "can't verify the developer" step. For all users:
 
@@ -95,7 +97,7 @@ The installer also works from Terminal, which skips the "can't verify the develo
 curl -fL -o /tmp/AutoClicker-Setup.pkg https://github.com/mayarakwad/AutoClicker-MacOS/releases/latest/download/AutoClicker-Setup.pkg && sudo installer -pkg /tmp/AutoClicker-Setup.pkg -target /
 ```
 
-For just you, use `installer -pkg /tmp/AutoClicker-Setup.pkg -target CurrentUserHomeDirectory` (no `sudo`). Both add the Dock item and Desktop link.
+For just you, use `installer -pkg /tmp/AutoClicker-Setup.pkg -target CurrentUserHomeDirectory` (no `sudo`). Both add the Dock item and Desktop link; with `sudo`, they're for whoever is signed in at the screen, and skipped if nobody is.
 
 ### Install with one command
 
@@ -107,7 +109,7 @@ mkdir -p ~/Applications && curl -fL -o /tmp/AutoClicker-mac.zip https://github.c
 
 Then allow it under Accessibility and Input Monitoring (see [Permissions](#permissions)).
 
-Releases are published by the GitHub build when a version tag is pushed: `git tag v1.0.2` then `git push origin v1.0.2`. Or, on GitHub, open **Actions > macOS build > Run workflow** and enter the tag. Either way, the tag must match the version in `version_info.txt`.
+Releases are published by the GitHub build when a version tag is pushed: `git tag v1.0.2` then `git push origin v1.0.2`. Or, on GitHub, open **Actions > macOS build > Run workflow** and enter a new tag. Either way, the tag must match the version in `version_info.txt`.
 
 ### Run from source
 

@@ -1,7 +1,8 @@
 #!/bin/bash
 # Installs dist/AutoClicker-Setup.pkg from the command line on a GitHub Mac and
 # checks what it leaves behind: for me only and for all users with the Dock
-# and Desktop choices on (the default), and for all users with them off. Run
+# and Desktop choices on (the default), for all users with them off, and when
+# moving from a me-only install to an all-users one. Run
 # by the macOS build workflow, which has passwordless sudo:
 #   bash .github/test_installer_mac.sh dist/AutoClicker-Setup.pkg
 # Failures are posted as annotations, which are readable without signing in.
@@ -23,8 +24,12 @@ check() {  # check "what is checked" command [args...]
     fi
 }
 
-dock_count() {  # how many Dock items point at $1
-    defaults read com.apple.dock persistent-apps 2>/dev/null | grep -c -F "$1" || true
+dock_count() {  # how many Dock items point at exactly $1 (a path ending in /)
+    defaults read com.apple.dock persistent-apps 2>/dev/null | grep -c -F -e "\"$1\"" -e "\"file://$1\"" || true
+}
+
+autoclicker_items() {  # how many Dock items point at any AutoClicker.app
+    defaults read com.apple.dock persistent-apps 2>/dev/null | grep -c 'AutoClicker\.app/"' || true
 }
 
 remove_from_dock() {  # so the next install starts from a clean Dock
@@ -112,6 +117,19 @@ test_install "All-users install" /Applications/AutoClicker.app on \
     sudo installer -pkg "$pkg" -target /
 test_install "All-users install without Dock and Desktop" /Applications/AutoClicker.app off \
     sudo installer -pkg "$pkg" -target / -applyChoiceChangesXML "$off"
+
+# An earlier me-only install's Dock item and Desktop link move to the new copy.
+echo "== Me-only install, then all users"
+log_start=$(log_lines)
+check "me-only install succeeds" installer -pkg "$pkg" -target CurrentUserHomeDirectory
+check "then the all-users install succeeds" sudo installer -pkg "$pkg" -target /
+check "the Dock has one AutoClicker item (found $(autoclicker_items))" test "$(autoclicker_items)" -eq 1
+check "it opens /Applications/AutoClicker.app" test "$(dock_count /Applications/AutoClicker.app/)" -eq 1
+check "the Desktop link opens /Applications/AutoClicker.app" test "$(readlink "$link")" = /Applications/AutoClicker.app
+show_install_log "Me-only install, then all users" "$log_start"
+remove_from_dock "AutoClicker.app"
+rm -f "$link"
+sudo rm -rf /Applications/AutoClicker.app "$HOME/Applications/AutoClicker.app"
 
 if [ "$failures" -gt 0 ]; then
     echo "$failures installer check(s) failed."

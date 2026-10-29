@@ -6,12 +6,9 @@
      - Installation Type: Add to Dock and Desktop link, both ticked. -->
 <installer-gui-script minSpecVersion="2">
     <title>AutoClicker @VERSION@</title>
-    <!-- The app is built for Apple Silicon only. -->
+    <!-- The app is built for Apple Silicon only, which also means macOS 11 or later. -->
     <options customize="always" require-scripts="false" hostArchitectures="arm64"/>
     <domains enable_localSystem="true" enable_currentUserHome="true" enable_anywhere="true"/>
-    <allowed-os-versions>
-        <os-version min="11.0"/>
-    </allowed-os-versions>
     <conclusion file="conclusion.html" mime-type="text/html"/>
 
     <choices-outline>
@@ -23,11 +20,11 @@
         <pkg-ref id="com.autoclicker.pkg.app"/>
     </choice>
     <choice id="dock" title="Add to Dock" start_selected="true"
-            description="Adds AutoClicker to the Dock of the user who is installing it.">
+            description="Adds AutoClicker to the Dock of the user signed in at the screen.">
         <pkg-ref id="com.autoclicker.pkg.dock"/>
     </choice>
     <choice id="desktop" title="Desktop link" start_selected="true"
-            description="Puts a link to AutoClicker on the Desktop of the user who is installing it.">
+            description="Puts a link to AutoClicker on the Desktop of the user signed in at the screen.">
         <pkg-ref id="com.autoclicker.pkg.desktop"/>
     </choice>
 

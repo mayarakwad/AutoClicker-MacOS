@@ -37,6 +37,9 @@ class MacInstallerTest(unittest.TestCase):
         domains = self.distribution.find("domains").attrib
         for domain in ("enable_localSystem", "enable_currentUserHome", "enable_anywhere"):
             self.assertEqual(domains[domain], "true")
+        # An OS check on the target volume would refuse other disks without macOS on them.
+        self.assertIsNone(self.distribution.find("allowed-os-versions"))
+        self.assertIsNone(self.distribution.find("volume-check"))
 
     def test_version_is_filled_in(self):
         text = (FOLDER / "Distribution.xml").read_text(encoding="utf-8")

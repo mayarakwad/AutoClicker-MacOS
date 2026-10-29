@@ -99,6 +99,12 @@ jobs:
             echo "::error title=Release tag doesn't match the version::$TAG was given, but dist/AutoClicker.app is version $version (version_info.txt)."
             exit 1
           fi
+          # A tag that already exists must be on the commit this run built (the last line is the commit an annotated tag points at).
+          tag_sha=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | awk 'END {print $1}')
+          if [ -n "$tag_sha" ] && [ "$tag_sha" != "$GITHUB_SHA" ]; then
+            echo "::error title=Tag is on another commit::$TAG already points at $tag_sha, but this run built $GITHUB_SHA. Use a new version."
+            exit 1
+          fi
           cat > release-notes.md <<'EOF'
           AutoClicker for macOS, Apple Silicon (M1 or later). Not yet tested by a person on a real Mac; please report what happens. Download with caution: it isn't signed with an Apple Developer ID.
 

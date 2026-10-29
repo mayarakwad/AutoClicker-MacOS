@@ -1,20 +1,51 @@
 #!/bin/sh
-# "Add to Dock" choice of AutoClicker-Setup.pkg: adds the app to the Dock of
-# the user who is installing it. See common.sh.
+# "Add to Dock" choice of AutoClicker-Setup.pkg: makes the Dock of the user
+# it acts for (see common.sh) hold one AutoClicker item, for this install.
 . "$(dirname "$0")/common.sh"
 
-# Already there (for example, when updating): adding it again would make two.
-if as_user defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q '/AutoClicker\.app/'; then
-    log "already in the Dock"
-    exit 0
-fi
+# The Dock stores items as a plain path (what this script adds) or as a
+# file:// URL with spaces and % encoded (what the Dock itself writes).
+url="file://$(printf '%s/' "$APP" | sed 's/%/%25/g; s/ /%20/g')"
 
-path=$(printf '%s/' "$APP" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-if as_user defaults write com.apple.dock persistent-apps -array-add \
-    "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>$path</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>"; then
-    as_user killall Dock  # the Dock reads its settings again when it restarts
-    log "added $APP to $USER_NAME's Dock"
+# Look through the Dock's items: keep one for this install, drop ones for an
+# AutoClicker.app elsewhere (an earlier install for all users, for me only, or
+# from the zip), so the Dock doesn't keep opening the old copy.
+dock=$(mktemp)
+as_user defaults export com.apple.dock - > "$dock" 2>/dev/null
+found=""
+changed=""
+i=0
+while /usr/libexec/PlistBuddy -c "Print :persistent-apps:$i" "$dock" >/dev/null 2>&1; do
+    item=$(/usr/libexec/PlistBuddy -c "Print :persistent-apps:$i:tile-data:file-data:_CFURLString" "$dock" 2>/dev/null)
+    case "$item" in
+        "$APP/" | "$url")
+            found=yes ;;
+        */AutoClicker.app/)
+            /usr/libexec/PlistBuddy -c "Delete :persistent-apps:$i" "$dock"
+            log "removed the Dock item for $item"
+            changed=yes
+            continue ;;  # the next item now has this index
+    esac
+    i=$((i + 1))
+done
+if [ -n "$changed" ]; then
+    as_user defaults import com.apple.dock - < "$dock"
+fi
+rm -f "$dock"
+
+if [ -n "$found" ]; then
+    log "already in the Dock"
 else
-    log "couldn't add AutoClicker to the Dock"
+    path=$(printf '%s/' "$APP" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    if as_user defaults write com.apple.dock persistent-apps -array-add \
+        "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>$path</string><key>_CFURLStringType</key><integer>0</integer></dict></dict></dict>"; then
+        log "added $APP to $USER_NAME's Dock"
+        changed=yes
+    else
+        log "couldn't add AutoClicker to the Dock"
+    fi
+fi
+if [ -n "$changed" ]; then
+    as_user killall Dock  # the Dock reads its settings again when it restarts
 fi
 exit 0
