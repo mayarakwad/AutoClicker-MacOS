@@ -32,7 +32,7 @@ Built in phases; the user tests each phase before the next one starts and says "
    - New Mac-only file: add it to `LEFT_OUT`. New `platforms` name: also add it to `windows/platforms/__init__.py`. `tests/test_windows_export.py` checks both.
    - The Windows build workflow tests, builds `AutoClicker.exe`, checks it starts, and publishes a release for `v*` tags. The README's one-command install downloads `releases/latest/download/AutoClicker.exe` with `Invoke-WebRequest`.
 
-Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 1 ms); the status line shows Running/Stopped and the click count.
+Requirements that apply to every phase: clicking never blocks the UI; Esc or the mouse in the top-left corner stops clicking immediately; inputs are validated (no empty/negative values, interval ≥ 0.1 ms, `engine.MIN_INTERVAL_NS`); the status line shows Running/Stopped and the click count.
 
 ## Commands
 
@@ -137,6 +137,9 @@ The UI enables the offset, repeat and X/Y entries through `trace_add` on their o
 
 Engine timing details that are easy to break:
 - Clicks are scheduled against `perf_counter` deadlines (no drift, no catch-up bursts).
+- The window has a nanoseconds box. `_read_config` sums the interval in whole nanoseconds, checks it against `MIN_INTERVAL_NS` (100000 = 0.1 ms), and passes `ClickConfig.interval_ms` as a float (1.5 for 1 ms + 500000 ns).
+- Waits under `SPIN_SECONDS` (2 ms) are timed by spinning on `perf_counter`; `time.sleep(0)` lets other threads run meanwhile. That's one busy core while clicking that fast; longer intervals sleep as before.
+  - With a fake mouse the engine keeps up at 0.1 ms (9,980/s). Real Windows clicks cost about 0.15 ms per injected event, so this PC tops out near 3,500/s at the cursor (2 events) and 1,500/s for `click_at` (4 events).
 - Waiting uses `time.sleep` in slices of at most 50 ms, so stop and the fail-safe react quickly even with long intervals. `time.sleep` uses a high-resolution timer on Python 3.11+ on Windows. Don't replace it with `Event.wait`, which falls back to about 15.6 ms granularity, especially while the window is minimized.
 - On macOS, App Nap throttles the timers of apps whose windows are hidden, which is exactly when an auto clicker runs.
   - `_refresh` calls `platforms.set_clicking(running)` on every start and stop. On macOS this holds an `NSProcessInfo` latency-critical activity while clicking; on Windows it does nothing.
